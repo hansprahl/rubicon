@@ -291,6 +291,15 @@ export function deleteWorkspace(workspaceId: string, userId: string) {
   });
 }
 
+export function renameWorkspace(workspaceId: string, name: string, description?: string) {
+  const body: Record<string, string> = { name };
+  if (description !== undefined) body.description = description;
+  return request<Workspace>(`/workspaces/${workspaceId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 export function joinWorkspace(workspaceId: string, userId: string) {
   return request<WorkspaceMember>(
     `/workspaces/${workspaceId}/join?user_id=${userId}`,

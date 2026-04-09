@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Loader2, Plus, Trash2, MessageSquare } from "lucide-react";
+import { Send, Loader2, Plus, Trash2, MessageSquare, Pencil, Check, X } from "lucide-react";
 import { NavSidebar } from "@/components/nav-sidebar";
 import { ConfidenceBadge } from "@/components/confidence-badge";
 import { AgentStatus } from "@/components/agent-status";
@@ -14,6 +14,7 @@ import {
   getConversations,
   createConversation,
   deleteConversation,
+  renameConversation,
 } from "@/lib/api";
 import type {
   ChatMessage as ChatMsg,
@@ -38,6 +39,8 @@ export default function ChatPage() {
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStart, setMentionStart] = useState(-1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -149,6 +152,21 @@ export default function ChatPage() {
     }
   }
 
+  async function handleRenameConversation(convId: string) {
+    if (!agent || !renameValue.trim()) return;
+    try {
+      const updated = await renameConversation(agent.id, convId, renameValue.trim());
+      setConversations((prev) =>
+        prev.map((c) => (c.id === convId ? { ...c, title: updated.title } : c))
+      );
+    } catch {
+      // ignore
+    } finally {
+      setRenamingId(null);
+      setRenameValue("");
+    }
+  }
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || !agent || sending) return;
@@ -241,30 +259,86 @@ export default function ChatPage() {
                   >
                     <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {conv.title}
-                      </div>
-                      {conv.last_message && (
+                      {renamingId === conv.id ? (
+                        <form
+                          className="flex items-center gap-1"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleRenameConversation(conv.id);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            className="w-full rounded border bg-background px-1.5 py-0.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                setRenamingId(null);
+                                setRenameValue("");
+                              }
+                            }}
+                          />
+                          <button type="submit" className="rounded p-0.5 text-green-500 hover:bg-green-500/20">
+                            <Check className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingId(null);
+                              setRenameValue("");
+                            }}
+                            className="rounded p-0.5 text-muted-foreground hover:bg-accent"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="truncate text-sm font-medium">
+                          {conv.title}
+                        </div>
+                      )}
+                      {conv.last_message && renamingId !== conv.id && (
                         <div className="truncate text-xs text-muted-foreground">
                           {conv.last_message}
                         </div>
                       )}
-                      <div className="mt-0.5 text-[10px] text-muted-foreground/60">
-                        {timeAgo(conv.updated_at)}
-                        {conv.message_count > 0 && ` · ${conv.message_count} msgs`}
-                      </div>
+                      {renamingId !== conv.id && (
+                        <div className="mt-0.5 text-[10px] text-muted-foreground/60">
+                          {timeAgo(conv.updated_at)}
+                          {conv.message_count > 0 && ` · ${conv.message_count} msgs`}
+                        </div>
+                      )}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteConversation(conv.id);
-                      }}
-                      disabled={deletingId === conv.id}
-                      className="mt-0.5 rounded p-1 text-muted-foreground/60 opacity-0 transition-opacity hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"
-                      title="Delete chat"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    {renamingId !== conv.id && (
+                      <div className="mt-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenamingId(conv.id);
+                            setRenameValue(conv.title);
+                          }}
+                          className="rounded p-1 text-muted-foreground/60 hover:bg-accent hover:text-foreground"
+                          title="Rename chat"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteConversation(conv.id);
+                          }}
+                          disabled={deletingId === conv.id}
+                          className="rounded p-1 text-muted-foreground/60 hover:bg-red-500/20 hover:text-red-400"
+                          title="Delete chat"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -343,7 +417,7 @@ export default function ChatPage() {
               <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
                 <MessageSquare className="h-10 w-10 text-muted-foreground/30" />
                 <p>Start a new conversation with {agent.agent_name}.</p>
-                <p className="text-xs">Type a message below or click "+" to begin.</p>
+                <p className="text-xs">Type a message below or click &ldquo;+&rdquo; to begin.</p>
               </div>
             ) : messages.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
 import { NavSidebar } from "@/components/nav-sidebar";
 import { WorkspaceCard } from "@/components/workspace-card";
-import { getWorkspaces, createWorkspace, deleteWorkspace } from "@/lib/api";
+import { getWorkspaces, createWorkspace, deleteWorkspace, renameWorkspace } from "@/lib/api";
 import type { WorkspaceWithMembers } from "@/lib/api";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
@@ -16,6 +16,8 @@ export default function WorkspacesPage() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const load = useCallback(async (uid: string) => {
     try {
@@ -54,6 +56,21 @@ export default function WorkspacesPage() {
       // failed
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleRename(wsId: string) {
+    if (!renameValue.trim()) return;
+    try {
+      await renameWorkspace(wsId, renameValue.trim());
+      setWorkspaces((prev) =>
+        prev.map((w) => (w.id === wsId ? { ...w, name: renameValue.trim() } : w))
+      );
+    } catch {
+      // failed
+    } finally {
+      setRenamingId(null);
+      setRenameValue("");
     }
   }
 
@@ -127,23 +144,75 @@ export default function WorkspacesPage() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {workspaces.map((ws) => (
                 <div key={ws.id} className="group relative">
-                  <WorkspaceCard workspace={ws} />
-                  {ws.role === "owner" && userId && (
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`Delete "${ws.name}" and all its data? This cannot be undone.`)) return;
-                        try {
-                          await deleteWorkspace(ws.id, userId);
-                          setWorkspaces((prev) => prev.filter((w) => w.id !== ws.id));
-                        } catch {
-                          // failed
-                        }
-                      }}
-                      className="absolute right-2 top-2 rounded-md p-1.5 text-muted-foreground/60 opacity-0 transition-opacity hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"
-                      title="Delete workspace"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  {renamingId === ws.id ? (
+                    <div className="rounded-lg border bg-card p-4">
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleRename(ws.id);
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              setRenamingId(null);
+                              setRenameValue("");
+                            }
+                          }}
+                        />
+                        <button type="submit" className="rounded-md p-1.5 text-green-500 hover:bg-green-500/20">
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenamingId(null);
+                            setRenameValue("");
+                          }}
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </form>
+                    </div>
+                  ) : (
+                    <>
+                      <WorkspaceCard workspace={ws} />
+                      {ws.role === "owner" && userId && (
+                        <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <button
+                            onClick={() => {
+                              setRenamingId(ws.id);
+                              setRenameValue(ws.name);
+                            }}
+                            className="rounded-md p-1.5 text-muted-foreground/60 hover:bg-accent hover:text-foreground"
+                            title="Rename workspace"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Delete "${ws.name}" and all its data? This cannot be undone.`)) return;
+                              try {
+                                await deleteWorkspace(ws.id, userId);
+                                setWorkspaces((prev) => prev.filter((w) => w.id !== ws.id));
+                              } catch {
+                                // failed
+                              }
+                            }}
+                            className="rounded-md p-1.5 text-muted-foreground/60 hover:bg-red-500/20 hover:text-red-400"
+                            title="Delete workspace"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ))}
