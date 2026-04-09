@@ -313,4 +313,37 @@ async def post_to_feed(
     result = sb.table("messages").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=400, detail="Failed to post message")
+
+    # War room: trigger all workspace member agents to respond
+    try:
+        members = (
+            sb.table("workspace_members")
+            .select("user_id")
+            .eq("workspace_id", str(workspace_id))
+            .execute()
+        )
+        ws_result = sb.table("workspaces").select("name").eq("id", str(workspace_id)).execute()
+        ws_name = ws_result.data[0]["name"] if ws_result.data else "workspace"
+
+        for member in (members.data or []):
+            if member["user_id"] == str(user_id):
+                continue  # Don't trigger the poster's own agent
+            agent_result = (
+                sb.table("agent_profiles")
+                .select("id")
+                .eq("user_id", member["user_id"])
+                .execute()
+            )
+            if agent_result.data:
+                sb.table("agent_tasks").insert({
+                    "agent_id": agent_result.data[0]["id"],
+                    "workspace_id": str(workspace_id),
+                    "title": f"Respond in {ws_name}",
+                    "description": f"A human posted in workspace '{ws_name}':\n\n{body.content}\n\nRespond with your perspective as a digital twin. Use your workspace tools to post your response to the feed.",
+                    "status": "queued",
+                    "priority": 10,
+                }).execute()
+    except Exception:
+        pass  # Agent triggering is best-effort
+
     return FeedMessage(**result.data[0])

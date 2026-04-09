@@ -81,6 +81,12 @@ async def _execute_task(task: dict) -> None:
         if task.get("description"):
             task_prompt += f"\n\nDetails: {task['description']}"
 
+        # Add workspace context to the prompt if this is a workspace task
+        workspace_id = task.get("workspace_id")
+        extra_context = ""
+        if workspace_id:
+            extra_context = f"\n\nYou are working in workspace ID: {workspace_id}. Use the post_message tool with this workspace_id to share your response with the team."
+
         # Run through the Doctrine orchestrator
         response_text, confidence = await handle_chat(
             agent_id=UUID(agent_id),
@@ -90,8 +96,23 @@ async def _execute_task(task: dict) -> None:
             values=agent.get("values", []),
             communication_style=agent.get("communication_style"),
             system_prompt=agent.get("system_prompt"),
-            user_message=f"[TASK] {task_prompt}",
+            user_message=f"[TASK] {task_prompt}{extra_context}",
+            user_id=agent.get("user_id", ""),
         )
+
+        # If workspace task and the agent didn't post via tool, post the response to the feed
+        if workspace_id:
+            try:
+                sb.table("messages").insert({
+                    "workspace_id": workspace_id,
+                    "agent_id": agent_id,
+                    "sender_type": "agent",
+                    "content": response_text,
+                    "confidence": confidence.model_dump(),
+                    "metadata": {"source": "war_room"},
+                }).execute()
+            except Exception:
+                pass  # Best-effort feed posting
 
         # Mark task as done
         sb.table("agent_tasks").update({
@@ -111,7 +132,7 @@ async def _execute_task(task: dict) -> None:
                 title=f"Task completed: {task['title'][:50]}",
                 body=response_text[:200],
                 category="agent",
-                link="/dashboard",
+                link=f"/workspaces/{workspace_id}" if workspace_id else "/dashboard",
                 metadata={"task_id": task_id, "agent_id": agent_id},
             )
 
