@@ -35,25 +35,33 @@ Run `supabase/migrations/001_initial_schema.sql` against your Supabase project v
 
 ## Key Paths
 - `apps/web/app/(auth)/login/page.tsx` — Login page (magic link + Google)
+- `apps/web/app/(auth)/onboarding/page.tsx` — 6-step onboarding wizard
 - `apps/web/app/dashboard/page.tsx` — Dashboard with agent status card
 - `apps/web/app/chat/page.tsx` — 1:1 chat with your agent
+- `apps/web/middleware.ts` — Auth middleware (redirects new users to onboarding)
 - `apps/web/components/nav-sidebar.tsx` — Navigation sidebar
 - `apps/web/components/confidence-badge.tsx` — Color-coded confidence indicator
 - `apps/web/components/agent-status.tsx` — Agent status display (idle/thinking/working)
+- `apps/web/components/document-upload.tsx` — Drag-and-drop file upload with progress
 - `apps/web/lib/supabase.ts` — Supabase client helpers (browser + server)
-- `apps/web/lib/api.ts` — FastAPI client helpers
+- `apps/web/lib/api.ts` — FastAPI client helpers (agents + onboarding)
 - `api/main.py` — FastAPI app with CORS + health check
 - `api/config.py` — Environment config via pydantic-settings
 - `api/routes/agents.py` — Agent CRUD + chat endpoints
+- `api/routes/onboarding.py` — Document upload, parsing, and agent synthesis
+- `api/parsers/idp_parser.py` — Extract goals/expertise from IDP via Claude
+- `api/parsers/ethics_parser.py` — Extract values/worldview from Ethics paper via Claude
+- `api/parsers/insights_parser.py` — Extract personality/strengths from Insights via Claude
 - `api/runtime/agent_worker.py` — ReAct agent loop using Claude API
 - `api/runtime/agent_manager.py` — Agent instance lifecycle management
 - `api/doctrine/orchestrator.py` — Doctrine-powered agent orchestrator
 - `api/doctrine/confidence.py` — Confidence scoring for agent outputs
 - `api/models/agent.py` — Pydantic models for agents and chat
+- `api/models/onboarding.py` — Pydantic models for onboarding and parsed docs
 - `supabase/migrations/001_initial_schema.sql` — Full Postgres schema
 
 ## Environment Variables
 See `.env.example` for all required vars. The frontend needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ## Build Phases
-See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phases 1-2 are complete.
+See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phases 1-3 are complete.

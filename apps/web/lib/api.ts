@@ -64,3 +64,81 @@ export function sendMessage(agentId: string, content: string) {
 export function getMessages(agentId: string, limit = 50) {
   return request<ChatMessage[]>(`/agents/${agentId}/messages?limit=${limit}`);
 }
+
+// --- Onboarding ---
+
+export interface OnboardingDocData {
+  id: string;
+  user_id: string;
+  doc_type: "idp" | "ethics" | "insights";
+  file_name: string;
+  storage_path: string;
+  parsed_data: Record<string, unknown>;
+  uploaded_at: string;
+}
+
+export interface OnboardingStatus {
+  completed: boolean;
+  uploaded_docs: string[];
+  has_idp: boolean;
+  has_ethics: boolean;
+  has_insights: boolean;
+}
+
+export function updateOnboardingProfile(
+  userId: string,
+  displayName: string,
+  avatarUrl?: string
+) {
+  return request<{ status: string; display_name: string }>(
+    `/onboarding/profile/${userId}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        display_name: displayName,
+        avatar_url: avatarUrl || null,
+      }),
+    }
+  );
+}
+
+export async function uploadOnboardingDoc(
+  userId: string,
+  docType: "idp" | "ethics" | "insights",
+  file: File
+): Promise<OnboardingDocData> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(
+    `${API_BASE}/onboarding/upload/${userId}/${docType}`,
+    { method: "POST", body: formData }
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Upload failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export function getOnboardingDocs(userId: string) {
+  return request<OnboardingDocData[]>(`/onboarding/docs/${userId}`);
+}
+
+export function getOnboardingStatus(userId: string) {
+  return request<OnboardingStatus>(`/onboarding/status/${userId}`);
+}
+
+export function synthesizeProfile(
+  userId: string,
+  agentName: string,
+  autonomyLevel: number
+) {
+  return request<Record<string, unknown>>(`/onboarding/synthesize/${userId}`, {
+    method: "POST",
+    body: JSON.stringify({
+      agent_name: agentName,
+      autonomy_level: autonomyLevel,
+    }),
+  });
+}
