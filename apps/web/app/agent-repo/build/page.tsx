@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronRight,
@@ -8,7 +8,6 @@ import {
   Loader2,
   Package,
   Sparkles,
-  Eye,
   Lock,
   Users,
   Building,

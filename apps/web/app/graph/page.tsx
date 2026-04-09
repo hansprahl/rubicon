@@ -224,7 +224,7 @@ function DetailPanel({
 // ---------------------------------------------------------------------------
 
 export default function GraphExplorerPage() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const [_userId, setUserId] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceWithMembers[]>([]);
   const [entities, setEntities] = useState<GraphEntity[]>([]);
   const [relationships, setRelationships] = useState<GraphRelationship[]>([]);

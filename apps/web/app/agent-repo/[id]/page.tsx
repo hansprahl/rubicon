@@ -12,8 +12,6 @@ import {
   Package,
   Pencil,
   Archive,
-  Check,
-  X,
 } from "lucide-react";
 import { NavSidebar } from "@/components/nav-sidebar";
 import {

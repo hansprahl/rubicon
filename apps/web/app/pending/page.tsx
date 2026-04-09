@@ -68,7 +68,7 @@ export default function PendingPage() {
                 Your account <span className="font-medium">{email}</span> is waiting for admin approval.
               </p>
               <p className="text-sm text-gray-500 mb-6">
-                Rubicon is a private platform for EMBA Cohort 84. The administrator will review your request shortly. This page will automatically redirect once you're approved.
+                Rubicon is a private platform for EMBA Cohort 84. The administrator will review your request shortly. This page will automatically redirect once you&apos;re approved.
               </p>
               <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
                 <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />

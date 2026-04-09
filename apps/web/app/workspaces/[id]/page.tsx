@@ -14,7 +14,6 @@ import {
   getRelationships,
   getWorkspaceTasks,
   getMilestones,
-  updateTask,
   updateMilestone,
   postToFeed,
 } from "@/lib/api";

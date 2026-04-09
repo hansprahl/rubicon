@@ -42,7 +42,7 @@ export function useRealtimeTable(
       .channel(name)
       .on(
         "postgres_changes",
-        channelConfig as any,
+        channelConfig as unknown,
         () => {
           onChangeRef.current();
         }

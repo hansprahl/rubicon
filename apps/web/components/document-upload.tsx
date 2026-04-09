@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Upload, FileText, CheckCircle, AlertCircle, X } from "lucide-react";
+import { Upload, FileText, CheckCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface DocumentUploadProps {

@@ -111,7 +111,7 @@ export default function OnboardingPage() {
     calendar: false,
     gmail: false,
   });
-  const [googleConnected, setGoogleConnected] = useState<Record<string, boolean>>({});
+  const [googleConnected, _setGoogleConnected] = useState<Record<string, boolean>>({});
 
   // Step 6: Enrichment questions
   const [enrichmentAnswers, setEnrichmentAnswers] = useState<Record<string, string>>({});

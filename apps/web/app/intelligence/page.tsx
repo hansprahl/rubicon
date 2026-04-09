@@ -9,7 +9,6 @@ import {
   Bot,
   Users,
   Star,
-  BarChart3,
   Loader2,
   Sparkles,
 } from "lucide-react";

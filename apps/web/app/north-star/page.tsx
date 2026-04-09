@@ -37,7 +37,7 @@ export default function NorthStarPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentStep, setCurrentStep] = useState(0);
   const [synthesizing, setSynthesizing] = useState(false);
-  const [preview, setPreview] = useState<NorthStar | null>(null);
+  const [_preview, setPreview] = useState<NorthStar | null>(null);
 
   // Edit state
   const [editMission, setEditMission] = useState("");
