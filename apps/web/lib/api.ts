@@ -61,15 +61,52 @@ export interface ChatMessage {
   created_at: string;
 }
 
-export function sendMessage(agentId: string, content: string) {
+export function sendMessage(agentId: string, content: string, conversationId?: string) {
   return request<ChatMessage>(`/agents/${agentId}/chat`, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, conversation_id: conversationId || null }),
   });
 }
 
-export function getMessages(agentId: string, limit = 50) {
-  return request<ChatMessage[]>(`/agents/${agentId}/messages?limit=${limit}`);
+export function getMessages(agentId: string, conversationId?: string, limit = 50) {
+  const params = conversationId ? `?conversation_id=${conversationId}&limit=${limit}` : `?limit=${limit}`;
+  return request<ChatMessage[]>(`/agents/${agentId}/messages${params}`);
+}
+
+// --- Conversations ---
+
+export interface Conversation {
+  id: string;
+  agent_id: string;
+  user_id: string;
+  title: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  last_message: string | null;
+  message_count: number;
+}
+
+export function getConversations(agentId: string) {
+  return request<Conversation[]>(`/agents/${agentId}/conversations`);
+}
+
+export function createConversation(agentId: string, title = "New chat") {
+  return request<Conversation>(`/agents/${agentId}/conversations?title=${encodeURIComponent(title)}`, {
+    method: "POST",
+  });
+}
+
+export function deleteConversation(agentId: string, conversationId: string) {
+  return request<{ status: string }>(`/agents/${agentId}/conversations/${conversationId}`, {
+    method: "DELETE",
+  });
+}
+
+export function renameConversation(agentId: string, conversationId: string, title: string) {
+  return request<Conversation>(`/agents/${agentId}/conversations/${conversationId}?title=${encodeURIComponent(title)}`, {
+    method: "PATCH",
+  });
 }
 
 // --- Onboarding ---
@@ -245,6 +282,12 @@ export function createWorkspace(
   return request<Workspace>(`/workspaces/?user_id=${userId}`, {
     method: "POST",
     body: JSON.stringify({ name, description: description || null }),
+  });
+}
+
+export function deleteWorkspace(workspaceId: string, userId: string) {
+  return request<{ status: string }>(`/workspaces/${workspaceId}?user_id=${userId}`, {
+    method: "DELETE",
   });
 }
 

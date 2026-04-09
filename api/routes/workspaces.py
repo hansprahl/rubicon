@@ -212,6 +212,32 @@ async def join_workspace(workspace_id: UUID, user_id: UUID):
     return WorkspaceMember(**result.data[0])
 
 
+@router.delete("/{workspace_id}")
+async def delete_workspace(workspace_id: UUID, user_id: UUID):
+    """Delete a workspace and all its data. Owner only."""
+    sb = _supabase()
+    # Check ownership
+    membership = (
+        sb.table("workspace_members")
+        .select("role")
+        .eq("workspace_id", str(workspace_id))
+        .eq("user_id", str(user_id))
+        .execute()
+    )
+    if not membership.data or membership.data[0]["role"] != "owner":
+        raise HTTPException(status_code=403, detail="Only the workspace owner can delete it")
+
+    # Delete related data (cascade should handle most, but be explicit)
+    sb.table("messages").delete().eq("workspace_id", str(workspace_id)).execute()
+    sb.table("shared_relationships").delete().eq("workspace_id", str(workspace_id)).execute()
+    sb.table("shared_entities").delete().eq("workspace_id", str(workspace_id)).execute()
+    sb.table("milestones").delete().eq("workspace_id", str(workspace_id)).execute()
+    sb.table("workspace_members").delete().eq("workspace_id", str(workspace_id)).execute()
+    sb.table("workspaces").delete().eq("id", str(workspace_id)).execute()
+
+    return {"status": "deleted"}
+
+
 @router.delete("/{workspace_id}/leave")
 async def leave_workspace(workspace_id: UUID, user_id: UUID):
     """Leave a workspace."""

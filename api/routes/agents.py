@@ -15,6 +15,7 @@ from api.models.agent import (
     AgentProfileUpdate,
     ChatMessage,
     ChatResponse,
+    Conversation,
 )
 from api.runtime.prompt_builder import get_template_prompt
 
@@ -179,6 +180,18 @@ async def chat_with_agent(agent_id: UUID, body: ChatMessage):
     if user_result.data and user_result.data[0].get("status") != "approved":
         raise HTTPException(status_code=403, detail="Account pending approval")
 
+    # Get or create conversation
+    conversation_id = body.conversation_id
+    if not conversation_id:
+        # Auto-create a new conversation
+        conv_result = sb.table("conversations").insert({
+            "agent_id": str(agent_id),
+            "user_id": agent["user_id"],
+            "title": body.content[:50] + ("..." if len(body.content) > 50 else ""),
+        }).execute()
+        if conv_result.data:
+            conversation_id = conv_result.data[0]["id"]
+
     # Mark agent as thinking
     sb.table("agent_profiles").update({"status": "thinking"}).eq(
         "id", str(agent_id)
@@ -194,6 +207,8 @@ async def chat_with_agent(agent_id: UUID, body: ChatMessage):
             "confidence": {},
             "metadata": {},
         }
+        if conversation_id:
+            user_msg["conversation_id"] = str(conversation_id)
         sb.table("messages").insert(user_msg).execute()
 
         # Run through Doctrine orchestrator
@@ -217,7 +232,15 @@ async def chat_with_agent(agent_id: UUID, body: ChatMessage):
             "confidence": confidence.model_dump(),
             "metadata": {},
         }
+        if conversation_id:
+            agent_msg["conversation_id"] = str(conversation_id)
         result = sb.table("messages").insert(agent_msg).execute()
+
+        # Update conversation timestamp
+        if conversation_id:
+            sb.table("conversations").update({
+                "updated_at": result.data[0]["created_at"],
+            }).eq("id", str(conversation_id)).execute()
 
         return ChatResponse(
             id=result.data[0]["id"],
@@ -226,6 +249,7 @@ async def chat_with_agent(agent_id: UUID, body: ChatMessage):
             content=response_text,
             confidence=confidence,
             created_at=result.data[0]["created_at"],
+            conversation_id=conversation_id,
         )
     finally:
         # Reset agent status
@@ -234,16 +258,106 @@ async def chat_with_agent(agent_id: UUID, body: ChatMessage):
         ).execute()
 
 
-@router.get("/{agent_id}/messages")
-async def get_messages(agent_id: UUID, limit: int = 50):
-    """Get recent chat messages for an agent."""
+# ---------------------------------------------------------------------------
+# Conversations
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{agent_id}/conversations")
+async def list_conversations(agent_id: UUID):
+    """List all conversations for an agent, newest first."""
     sb = _supabase()
     result = (
-        sb.table("messages")
+        sb.table("conversations")
         .select("*")
         .eq("agent_id", str(agent_id))
-        .order("created_at", desc=False)
-        .limit(limit)
+        .eq("status", "active")
+        .order("updated_at", desc=True)
         .execute()
     )
+    conversations = []
+    for conv in (result.data or []):
+        # Get last message and count
+        msgs = (
+            sb.table("messages")
+            .select("content")
+            .eq("conversation_id", conv["id"])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        count = (
+            sb.table("messages")
+            .select("id", count="exact")
+            .eq("conversation_id", conv["id"])
+            .execute()
+        )
+        conv["last_message"] = msgs.data[0]["content"][:80] if msgs.data else None
+        conv["message_count"] = count.count if count.count else 0
+        conversations.append(conv)
+    return conversations
+
+
+@router.post("/{agent_id}/conversations")
+async def create_conversation(agent_id: UUID, title: str = "New chat"):
+    """Create a new conversation."""
+    sb = _supabase()
+    agent_result = sb.table("agent_profiles").select("user_id").eq("id", str(agent_id)).execute()
+    if not agent_result.data:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    result = sb.table("conversations").insert({
+        "agent_id": str(agent_id),
+        "user_id": agent_result.data[0]["user_id"],
+        "title": title,
+    }).execute()
+    if not result.data:
+        raise HTTPException(status_code=400, detail="Failed to create conversation")
+    return result.data[0]
+
+
+@router.patch("/{agent_id}/conversations/{conversation_id}")
+async def update_conversation(agent_id: UUID, conversation_id: UUID, title: str | None = None, status: str | None = None):
+    """Update a conversation title or status."""
+    sb = _supabase()
+    data = {}
+    if title is not None:
+        data["title"] = title
+    if status is not None:
+        data["status"] = status
+    if not data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    result = (
+        sb.table("conversations")
+        .update(data)
+        .eq("id", str(conversation_id))
+        .eq("agent_id", str(agent_id))
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return result.data[0]
+
+
+@router.delete("/{agent_id}/conversations/{conversation_id}")
+async def delete_conversation(agent_id: UUID, conversation_id: UUID):
+    """Delete a conversation and its messages."""
+    sb = _supabase()
+    # Delete messages first (cascade should handle this, but be explicit)
+    sb.table("messages").delete().eq("conversation_id", str(conversation_id)).execute()
+    sb.table("conversations").delete().eq("id", str(conversation_id)).eq("agent_id", str(agent_id)).execute()
+    return {"status": "deleted"}
+
+
+@router.get("/{agent_id}/messages")
+async def get_messages(agent_id: UUID, conversation_id: str | None = None, limit: int = 50):
+    """Get messages for an agent, optionally filtered by conversation."""
+    sb = _supabase()
+    query = sb.table("messages").select("*").eq("agent_id", str(agent_id))
+    if conversation_id:
+        query = query.eq("conversation_id", conversation_id)
+    else:
+        # Legacy: return messages without conversation_id
+        query = query.is_("conversation_id", "null")
+    result = query.order("created_at", desc=False).limit(limit).execute()
     return result.data

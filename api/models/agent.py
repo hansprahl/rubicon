@@ -46,6 +46,7 @@ class AgentProfile(BaseModel):
 
 class ChatMessage(BaseModel):
     content: str
+    conversation_id: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -55,11 +56,24 @@ class ChatResponse(BaseModel):
     content: str
     confidence: ConfidenceScore
     created_at: datetime
+    conversation_id: UUID | None = None
 
 
 class ConfidenceScore(BaseModel):
     score: float = Field(ge=0.0, le=1.0)
     reasoning: str
+
+
+class Conversation(BaseModel):
+    id: UUID
+    agent_id: UUID
+    user_id: UUID
+    title: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    last_message: str | None = None
+    message_count: int = 0
 
 
 # Rebuild ChatResponse now that ConfidenceScore is defined

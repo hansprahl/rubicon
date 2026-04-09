@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { NavSidebar } from "@/components/nav-sidebar";
 import { WorkspaceCard } from "@/components/workspace-card";
-import { getWorkspaces, createWorkspace } from "@/lib/api";
+import { getWorkspaces, createWorkspace, deleteWorkspace } from "@/lib/api";
 import type { WorkspaceWithMembers } from "@/lib/api";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
@@ -126,7 +126,26 @@ export default function WorkspacesPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {workspaces.map((ws) => (
-                <WorkspaceCard key={ws.id} workspace={ws} />
+                <div key={ws.id} className="group relative">
+                  <WorkspaceCard workspace={ws} />
+                  {ws.role === "owner" && userId && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Delete "${ws.name}" and all its data? This cannot be undone.`)) return;
+                        try {
+                          await deleteWorkspace(ws.id, userId);
+                          setWorkspaces((prev) => prev.filter((w) => w.id !== ws.id));
+                        } catch {
+                          // failed
+                        }
+                      }}
+                      className="absolute right-2 top-2 rounded-md p-1.5 text-muted-foreground/60 opacity-0 transition-opacity hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"
+                      title="Delete workspace"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}
