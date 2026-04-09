@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Loader2, Plus, Trash2, MessageSquare, Pencil, Check, X } from "lucide-react";
+import { Send, Loader2, Plus, Trash2, MessageSquare, Pencil, Check, X, ChevronDown } from "lucide-react";
 import { NavSidebar } from "@/components/nav-sidebar";
 import { ConfidenceBadge } from "@/components/confidence-badge";
 import { AgentStatus } from "@/components/agent-status";
@@ -41,6 +41,7 @@ export default function ChatPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [mobileChatsOpen, setMobileChatsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -314,7 +315,10 @@ export default function ChatPage() {
                       )}
                     </div>
                     {renamingId !== conv.id && (
-                      <div className="mt-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className={cn(
+                        "mt-0.5 flex gap-0.5 transition-opacity",
+                        currentConvId === conv.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                      )}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -351,16 +355,87 @@ export default function ChatPage() {
           {/* Header */}
           <header className="flex h-14 items-center justify-between border-b px-6 max-md:pl-14">
             <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold">Chat</h1>
-              {/* Mobile new chat button */}
+              <h1 className="text-lg font-semibold max-md:hidden">Chat</h1>
+              {/* Mobile conversation switcher */}
               {agent && (
-                <button
-                  onClick={handleNewChat}
-                  className="rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-accent md:hidden"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+                <div className="relative md:hidden">
+                  <button
+                    onClick={() => setMobileChatsOpen(!mobileChatsOpen)}
+                    className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    <span className="max-w-[140px] truncate">
+                      {conversations.find((c) => c.id === currentConvId)?.title || "Chats"}
+                    </span>
+                    <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", mobileChatsOpen && "rotate-180")} />
+                  </button>
+                  {mobileChatsOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setMobileChatsOpen(false)} />
+                      <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border bg-card shadow-lg">
+                        <div className="flex items-center justify-between border-b px-3 py-2">
+                          <span className="text-xs font-semibold text-muted-foreground">Conversations</span>
+                          <button
+                            onClick={() => { handleNewChat(); setMobileChatsOpen(false); }}
+                            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="max-h-64 overflow-auto">
+                          {conversations.map((conv) => (
+                            <div
+                              key={conv.id}
+                              className={cn(
+                                "flex items-center justify-between px-3 py-2.5 text-sm cursor-pointer",
+                                currentConvId === conv.id ? "bg-accent" : "hover:bg-accent/50"
+                              )}
+                              onClick={() => { setCurrentConvId(conv.id); setMobileChatsOpen(false); }}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-medium">{conv.title}</div>
+                                <div className="text-[10px] text-muted-foreground/60">
+                                  {timeAgo(conv.updated_at)}
+                                  {conv.message_count > 0 && ` · ${conv.message_count} msgs`}
+                                </div>
+                              </div>
+                              <div className="ml-2 flex shrink-0 gap-1">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRenamingId(conv.id);
+                                    setRenameValue(conv.title);
+                                    setMobileChatsOpen(false);
+                                  }}
+                                  className="rounded p-1 text-muted-foreground/60 hover:bg-accent hover:text-foreground"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteConversation(conv.id);
+                                    setMobileChatsOpen(false);
+                                  }}
+                                  className="rounded p-1 text-muted-foreground/60 hover:bg-red-500/20 hover:text-red-400"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {conversations.length === 0 && (
+                            <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                              No conversations yet.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
+              {/* Desktop new chat - hidden, it's in the sidebar */}
             </div>
             {agent && (
               <AgentStatus
@@ -369,6 +444,34 @@ export default function ChatPage() {
               />
             )}
           </header>
+
+          {/* Mobile rename overlay */}
+          {renamingId && agent && (
+            <div className="flex items-center gap-2 border-b bg-card px-4 py-2 md:hidden">
+              <span className="text-xs text-muted-foreground">Rename:</span>
+              <form
+                className="flex flex-1 items-center gap-2"
+                onSubmit={(e) => { e.preventDefault(); handleRenameConversation(renamingId); }}
+              >
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button type="submit" className="rounded-md p-1.5 text-green-500 hover:bg-green-500/20">
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setRenamingId(null); setRenameValue(""); }}
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </form>
+            </div>
+          )}
 
           {/* Messages */}
           <div className="flex-1 overflow-auto p-6">

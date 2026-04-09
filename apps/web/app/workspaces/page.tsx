@@ -184,7 +184,7 @@ export default function WorkspacesPage() {
                     <>
                       <WorkspaceCard workspace={ws} />
                       {ws.role === "owner" && userId && (
-                        <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <div className="absolute right-2 top-2 flex gap-1 opacity-100 md:opacity-0 transition-opacity md:group-hover:opacity-100">
                           <button
                             onClick={() => {
                               setRenamingId(ws.id);
