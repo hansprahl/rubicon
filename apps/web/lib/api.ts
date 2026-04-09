@@ -129,6 +129,61 @@ export function getOnboardingStatus(userId: string) {
   return request<OnboardingStatus>(`/onboarding/status/${userId}`);
 }
 
+// --- Approvals ---
+
+export interface ApprovalWithAgent {
+  id: string;
+  user_id: string;
+  agent_id: string;
+  workspace_id: string | null;
+  action_type: string;
+  payload: Record<string, unknown>;
+  status: "pending" | "approved" | "rejected" | "expired";
+  human_note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  agent_name: string | null;
+  confidence_score: number | null;
+  confidence_reasoning: string | null;
+}
+
+export function getApprovals(userId: string, status = "pending") {
+  return request<ApprovalWithAgent[]>(
+    `/approvals/user/${userId}?status=${status}`
+  );
+}
+
+export function getApprovalCount(userId: string) {
+  return request<{ count: number }>(`/approvals/user/${userId}/count`);
+}
+
+export function approveAction(id: string, humanNote?: string) {
+  return request<ApprovalWithAgent>(`/approvals/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ human_note: humanNote || null }),
+  });
+}
+
+export function rejectAction(id: string, humanNote?: string) {
+  return request<ApprovalWithAgent>(`/approvals/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ human_note: humanNote || null }),
+  });
+}
+
+export function editAndApprove(
+  id: string,
+  payload: Record<string, unknown>,
+  humanNote?: string
+) {
+  return request<ApprovalWithAgent>(`/approvals/${id}/edit-approve`, {
+    method: "POST",
+    body: JSON.stringify({ payload, human_note: humanNote || null }),
+  });
+}
+
+// --- Onboarding ---
+
 export function synthesizeProfile(
   userId: string,
   agentName: string,

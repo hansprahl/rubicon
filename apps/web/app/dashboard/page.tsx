@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, CheckCircle } from "lucide-react";
 import { NavSidebar } from "@/components/nav-sidebar";
 import { AgentStatus } from "@/components/agent-status";
-import { getAgentByUser } from "@/lib/api";
+import { getAgentByUser, getApprovalCount } from "@/lib/api";
 import type { AgentProfile } from "@/lib/api";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
 export default function DashboardPage() {
   const [agent, setAgent] = useState<AgentProfile | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -22,6 +23,8 @@ export default function DashboardPage() {
         if (!user) return;
         const profile = await getAgentByUser(user.id);
         setAgent(profile);
+        const { count } = await getApprovalCount(user.id);
+        setPendingCount(count);
       } catch {
         // Agent not set up yet
       }
@@ -67,15 +70,24 @@ export default function DashboardPage() {
               </div>
             </Link>
 
-            <div className="rounded-lg border bg-card p-6">
+            <Link
+              href="/approvals"
+              className="rounded-lg border bg-card p-6 transition-colors hover:bg-accent"
+            >
               <h3 className="text-sm font-medium text-muted-foreground">
                 Pending Approvals
               </h3>
-              <p className="mt-2 text-2xl font-bold">0</p>
+              <p className="mt-2 text-2xl font-bold">{pendingCount}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                No actions awaiting review
+                {pendingCount === 0
+                  ? "No actions awaiting review"
+                  : `${pendingCount} action${pendingCount === 1 ? "" : "s"} awaiting review`}
               </p>
-            </div>
+              <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+                <CheckCircle className="h-3 w-3" />
+                Review approvals
+              </div>
+            </Link>
             <div className="rounded-lg border bg-card p-6">
               <h3 className="text-sm font-medium text-muted-foreground">
                 Workspaces

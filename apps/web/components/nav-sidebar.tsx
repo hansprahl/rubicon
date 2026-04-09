@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -12,6 +13,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { getApprovalCount } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -25,9 +27,59 @@ const navItems = [
 
 export function NavSidebar() {
   const pathname = usePathname();
-  const supabase = createBrowserSupabaseClient();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const refreshCount = useCallback(async (uid: string) => {
+    try {
+      const { count } = await getApprovalCount(uid);
+      setPendingCount(count);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const supabase = createBrowserSupabaseClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    async function init() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      refreshCount(user.id);
+
+      // Subscribe to realtime changes on the approvals table for this user
+      channel = supabase
+        .channel("nav-approval-count")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "approvals",
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            refreshCount(user.id);
+          }
+        )
+        .subscribe();
+    }
+
+    init();
+
+    return () => {
+      if (channel) {
+        const supabase = createBrowserSupabaseClient();
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [refreshCount]);
 
   async function handleSignOut() {
+    const supabase = createBrowserSupabaseClient();
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
@@ -43,6 +95,8 @@ export function NavSidebar() {
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href;
+          const showBadge =
+            item.href === "/approvals" && pendingCount > 0;
           return (
             <Link
               key={item.href}
@@ -56,6 +110,11 @@ export function NavSidebar() {
             >
               <Icon className="h-4 w-4" />
               {item.label}
+              {showBadge && (
+                <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-medium text-white">
+                  {pendingCount}
+                </span>
+              )}
             </Link>
           );
         })}
