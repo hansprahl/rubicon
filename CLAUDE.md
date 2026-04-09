@@ -40,6 +40,7 @@ Run `supabase/migrations/001_initial_schema.sql` against your Supabase project v
 - `apps/web/app/chat/page.tsx` — 1:1 chat with your agent
 - `apps/web/app/workspaces/page.tsx` — Workspace list with create flow
 - `apps/web/app/workspaces/[id]/page.tsx` — Workspace detail (Feed/Board/Graph tabs)
+- `apps/web/app/graph/page.tsx` — Knowledge graph explorer (d3-force visualization)
 - `apps/web/middleware.ts` — Auth middleware (redirects new users to onboarding)
 - `apps/web/components/nav-sidebar.tsx` — Navigation sidebar
 - `apps/web/components/confidence-badge.tsx` — Color-coded confidence indicator
@@ -47,12 +48,13 @@ Run `supabase/migrations/001_initial_schema.sql` against your Supabase project v
 - `apps/web/components/document-upload.tsx` — Drag-and-drop file upload with progress
 - `apps/web/components/workspace-card.tsx` — Workspace card with member count + role badge
 - `apps/web/lib/supabase.ts` — Supabase client helpers (browser + server)
-- `apps/web/lib/api.ts` — FastAPI client helpers (agents, onboarding, workspaces, graph)
+- `apps/web/lib/api.ts` — FastAPI client helpers (agents, onboarding, workspaces, graph, milestones, tasks)
 - `api/main.py` — FastAPI app with CORS + health check
 - `api/config.py` — Environment config via pydantic-settings
 - `api/routes/agents.py` — Agent CRUD + chat endpoints
 - `api/routes/workspaces.py` — Workspace CRUD, membership, invitations, feed
 - `api/routes/graph.py` — Shared knowledge graph entity + relationship CRUD
+- `api/routes/milestones.py` — Milestone CRUD + agent task endpoints
 - `api/routes/onboarding.py` — Document upload, parsing, and agent synthesis
 - `api/parsers/idp_parser.py` — Extract goals/expertise from IDP via Claude
 - `api/parsers/ethics_parser.py` — Extract values/worldview from Ethics paper via Claude
@@ -69,6 +71,7 @@ Run `supabase/migrations/001_initial_schema.sql` against your Supabase project v
 - `api/models/onboarding.py` — Pydantic models for onboarding and parsed docs
 - `api/models/workspace.py` — Pydantic models for workspaces, feed, entities, relationships
 - `api/models/event.py` — Pydantic models for events, subscriptions, disagreements
+- `api/models/milestone.py` — Pydantic models for milestones and agent tasks
 - `supabase/migrations/001_initial_schema.sql` — Full Postgres schema
 - `supabase/migrations/003_event_subscriptions.sql` — Event subscriptions table + indexes
 
@@ -76,4 +79,4 @@ Run `supabase/migrations/001_initial_schema.sql` against your Supabase project v
 See `.env.example` for all required vars. The frontend needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ## Build Phases
-See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phases 1-6 are complete.
+See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phases 1-7 are complete.

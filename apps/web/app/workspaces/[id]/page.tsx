@@ -12,6 +12,10 @@ import {
   getWorkspaceMembers,
   getEntities,
   getRelationships,
+  getWorkspaceTasks,
+  getMilestones,
+  updateTask,
+  updateMilestone,
   postToFeed,
 } from "@/lib/api";
 import type {
@@ -20,6 +24,8 @@ import type {
   FeedMessage,
   GraphEntity,
   GraphRelationship,
+  AgentTask,
+  Milestone,
 } from "@/lib/api";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
@@ -165,15 +171,227 @@ function FeedTab({
 }
 
 // ---------------------------------------------------------------------------
-// Board Tab (placeholder — full kanban in Phase 7)
+// Board Tab — Kanban columns + milestone tracking
 // ---------------------------------------------------------------------------
 
-function BoardTab({ workspaceId }: { workspaceId: string }) {
+const KANBAN_COLUMNS: { key: AgentTask["status"]; label: string; accent: string }[] = [
+  { key: "queued", label: "Queued", accent: "border-t-gray-400" },
+  { key: "working", label: "Working", accent: "border-t-blue-500" },
+  { key: "needs_approval", label: "Needs Approval", accent: "border-t-yellow-500" },
+  { key: "done", label: "Done", accent: "border-t-green-500" },
+];
+
+const MILESTONE_STATUS_COLORS: Record<string, string> = {
+  pending: "bg-gray-100 text-gray-700",
+  in_progress: "bg-blue-100 text-blue-700",
+  complete: "bg-green-100 text-green-700",
+  at_risk: "bg-yellow-100 text-yellow-700",
+  missed: "bg-red-100 text-red-700",
+};
+
+function TaskCard({ task }: { task: AgentTask }) {
   return (
-    <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-      Board view (agent tasks &amp; milestones) coming in Phase 7.
-      <br />
-      Workspace: {workspaceId.slice(0, 8)}...
+    <div className="rounded-md border bg-card p-3 shadow-sm">
+      <p className="text-sm font-medium">{task.title}</p>
+      {task.description && (
+        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+          {task.description}
+        </p>
+      )}
+      <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+        <span>Agent {task.agent_id.slice(0, 8)}</span>
+        <span className="ml-auto">
+          {new Date(task.updated_at).toLocaleDateString()}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MilestoneRow({
+  milestone,
+  onStatusChange,
+}: {
+  milestone: Milestone;
+  onStatusChange: (id: string, status: string) => void;
+}) {
+  const dueDate = milestone.due_date
+    ? new Date(milestone.due_date)
+    : null;
+  const isOverdue =
+    dueDate && milestone.status !== "complete" && dueDate < new Date();
+
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-md border bg-card p-3 ${isOverdue ? "border-red-300" : ""}`}
+    >
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{milestone.title}</span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${MILESTONE_STATUS_COLORS[milestone.status] || MILESTONE_STATUS_COLORS.pending}`}
+          >
+            {milestone.status.replace("_", " ")}
+          </span>
+          {isOverdue && (
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
+              overdue
+            </span>
+          )}
+        </div>
+        {milestone.description && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {milestone.description}
+          </p>
+        )}
+        <div className="mt-1 flex items-center gap-3 text-[10px] text-muted-foreground">
+          {dueDate && (
+            <span>Due: {dueDate.toLocaleDateString()}</span>
+          )}
+          {milestone.assigned_agents.length > 0 && (
+            <span>
+              {milestone.assigned_agents.length} agent
+              {milestone.assigned_agents.length !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+      </div>
+      <select
+        value={milestone.status}
+        onChange={(e) => onStatusChange(milestone.id, e.target.value)}
+        className="rounded-md border bg-background px-2 py-1 text-xs"
+      >
+        <option value="pending">Pending</option>
+        <option value="in_progress">In Progress</option>
+        <option value="complete">Complete</option>
+        <option value="at_risk">At Risk</option>
+        <option value="missed">Missed</option>
+      </select>
+    </div>
+  );
+}
+
+function BoardTab({ workspaceId }: { workspaceId: string }) {
+  const [tasks, setTasks] = useState<AgentTask[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [boardView, setBoardView] = useState<"kanban" | "milestones">("kanban");
+
+  const load = useCallback(async () => {
+    try {
+      const [t, m] = await Promise.all([
+        getWorkspaceTasks(workspaceId),
+        getMilestones(workspaceId),
+      ]);
+      setTasks(t);
+      setMilestones(m);
+    } catch {
+      // failed
+    } finally {
+      setLoading(false);
+    }
+  }, [workspaceId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleMilestoneStatusChange(id: string, status: string) {
+    try {
+      await updateMilestone(id, { status });
+      setMilestones((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, status: status as Milestone["status"] } : m))
+      );
+    } catch {
+      // failed
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+        Loading board...
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Sub-tabs */}
+      <div className="flex items-center gap-2 border-b px-4 py-2">
+        <button
+          onClick={() => setBoardView("kanban")}
+          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+            boardView === "kanban"
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Tasks
+        </button>
+        <button
+          onClick={() => setBoardView("milestones")}
+          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+            boardView === "milestones"
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Milestones ({milestones.length})
+        </button>
+      </div>
+
+      {boardView === "kanban" ? (
+        /* Kanban columns */
+        <div className="flex flex-1 gap-4 overflow-x-auto p-4">
+          {KANBAN_COLUMNS.map((col) => {
+            const colTasks = tasks.filter((t) => t.status === col.key);
+            return (
+              <div
+                key={col.key}
+                className={`flex w-64 shrink-0 flex-col rounded-lg border border-t-2 bg-muted/30 ${col.accent}`}
+              >
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {col.label}
+                  </span>
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {colTasks.length}
+                  </span>
+                </div>
+                <div className="flex-1 space-y-2 overflow-auto px-2 pb-2">
+                  {colTasks.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-muted-foreground">
+                      No tasks
+                    </div>
+                  ) : (
+                    colTasks.map((task) => (
+                      <TaskCard key={task.id} task={task} />
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Milestones list */
+        <div className="flex-1 space-y-2 overflow-auto p-4">
+          {milestones.length === 0 ? (
+            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+              No milestones yet.
+            </div>
+          ) : (
+            milestones.map((m) => (
+              <MilestoneRow
+                key={m.id}
+                milestone={m}
+                onStatusChange={handleMilestoneStatusChange}
+              />
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

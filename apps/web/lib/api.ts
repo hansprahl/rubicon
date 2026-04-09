@@ -402,6 +402,101 @@ export function createRelationship(
   );
 }
 
+// --- Milestones ---
+
+export interface Milestone {
+  id: string;
+  workspace_id: string;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  status: "pending" | "in_progress" | "complete" | "at_risk" | "missed";
+  assigned_agents: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export function getMilestones(
+  workspaceId: string,
+  status?: string
+) {
+  const params = status ? `?status=${status}` : "";
+  return request<Milestone[]>(
+    `/milestones/workspaces/${workspaceId}${params}`
+  );
+}
+
+export function createMilestone(
+  workspaceId: string,
+  milestone: {
+    title: string;
+    description?: string;
+    due_date?: string;
+    assigned_agents?: string[];
+  }
+) {
+  return request<Milestone>(`/milestones/workspaces/${workspaceId}`, {
+    method: "POST",
+    body: JSON.stringify(milestone),
+  });
+}
+
+export function updateMilestone(
+  milestoneId: string,
+  data: {
+    title?: string;
+    description?: string;
+    due_date?: string;
+    status?: string;
+    assigned_agents?: string[];
+  }
+) {
+  return request<Milestone>(`/milestones/${milestoneId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteMilestone(milestoneId: string) {
+  return request<{ status: string }>(`/milestones/${milestoneId}`, {
+    method: "DELETE",
+  });
+}
+
+// --- Agent Tasks ---
+
+export interface AgentTask {
+  id: string;
+  agent_id: string;
+  workspace_id: string | null;
+  title: string;
+  description: string | null;
+  status: "queued" | "working" | "needs_approval" | "done" | "failed";
+  result: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getWorkspaceTasks(
+  workspaceId: string,
+  status?: string
+) {
+  const params = status ? `?status=${status}` : "";
+  return request<AgentTask[]>(
+    `/milestones/tasks/workspace/${workspaceId}${params}`
+  );
+}
+
+export function updateTask(
+  taskId: string,
+  data: { title?: string; description?: string; status?: string; result?: Record<string, unknown> }
+) {
+  return request<AgentTask>(`/milestones/tasks/${taskId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 // --- Onboarding ---
 
 export function synthesizeProfile(
