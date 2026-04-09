@@ -35,15 +35,25 @@ Run `supabase/migrations/001_initial_schema.sql` against your Supabase project v
 
 ## Key Paths
 - `apps/web/app/(auth)/login/page.tsx` — Login page (magic link + Google)
-- `apps/web/app/dashboard/page.tsx` — Dashboard shell
+- `apps/web/app/dashboard/page.tsx` — Dashboard with agent status card
+- `apps/web/app/chat/page.tsx` — 1:1 chat with your agent
 - `apps/web/components/nav-sidebar.tsx` — Navigation sidebar
+- `apps/web/components/confidence-badge.tsx` — Color-coded confidence indicator
+- `apps/web/components/agent-status.tsx` — Agent status display (idle/thinking/working)
 - `apps/web/lib/supabase.ts` — Supabase client helpers (browser + server)
+- `apps/web/lib/api.ts` — FastAPI client helpers
 - `api/main.py` — FastAPI app with CORS + health check
 - `api/config.py` — Environment config via pydantic-settings
+- `api/routes/agents.py` — Agent CRUD + chat endpoints
+- `api/runtime/agent_worker.py` — ReAct agent loop using Claude API
+- `api/runtime/agent_manager.py` — Agent instance lifecycle management
+- `api/doctrine/orchestrator.py` — Doctrine-powered agent orchestrator
+- `api/doctrine/confidence.py` — Confidence scoring for agent outputs
+- `api/models/agent.py` — Pydantic models for agents and chat
 - `supabase/migrations/001_initial_schema.sql` — Full Postgres schema
 
 ## Environment Variables
 See `.env.example` for all required vars. The frontend needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ## Build Phases
-See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phase 1 (foundation) is complete.
+See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phases 1-2 are complete.

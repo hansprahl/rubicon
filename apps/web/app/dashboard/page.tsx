@@ -1,8 +1,34 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { MessageSquare } from "lucide-react";
 import { NavSidebar } from "@/components/nav-sidebar";
+import { AgentStatus } from "@/components/agent-status";
+import { getAgentByUser } from "@/lib/api";
+import type { AgentProfile } from "@/lib/api";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 
 export default function DashboardPage() {
+  const [agent, setAgent] = useState<AgentProfile | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const supabase = createBrowserSupabaseClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+        const profile = await getAgentByUser(user.id);
+        setAgent(profile);
+      } catch {
+        // Agent not set up yet
+      }
+    }
+    load();
+  }, []);
+
   return (
     <div className="flex h-screen">
       <NavSidebar />
@@ -12,15 +38,35 @@ export default function DashboardPage() {
         </header>
         <div className="p-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-lg border bg-card p-6">
+            {/* Agent Status Card */}
+            <Link
+              href="/chat"
+              className="rounded-lg border bg-card p-6 transition-colors hover:bg-accent"
+            >
               <h3 className="text-sm font-medium text-muted-foreground">
                 Agent Status
               </h3>
-              <p className="mt-2 text-2xl font-bold">Idle</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Your digital twin is ready
-              </p>
-            </div>
+              {agent ? (
+                <div className="mt-3">
+                  <AgentStatus
+                    status={agent.status}
+                    agentName={agent.agent_name}
+                  />
+                </div>
+              ) : (
+                <>
+                  <p className="mt-2 text-2xl font-bold">Not configured</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Complete onboarding to create your digital twin
+                  </p>
+                </>
+              )}
+              <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+                <MessageSquare className="h-3 w-3" />
+                Open chat
+              </div>
+            </Link>
+
             <div className="rounded-lg border bg-card p-6">
               <h3 className="text-sm font-medium text-muted-foreground">
                 Pending Approvals
