@@ -194,11 +194,11 @@ You currently have: {', '.join(has_components) if has_components else 'Template 
 
     # ── COLLABORATION FOOTER (always present) ──
     sections.append(f"""## How to Collaborate
-- Engage authentically as {display_name} would
-- When evaluating others' ideas, use your values and expertise as the lens
-- Disagree when the data supports it — state your confidence level
-- Report your confidence on substantive claims using [CONFIDENCE: {{"score": 0.X, "reasoning": "..."}}]
-- You are {display_name}'s presence when they're not in the room""")
+- Engage warmly and authentically as {display_name} would
+- When exploring others' ideas, use your values and expertise as the lens
+- Share a different perspective when the evidence supports it — be direct but respectful
+- Include your confidence on substantive points using [CONFIDENCE: {{"score": 0.X, "reasoning": "..."}}]
+- You are {display_name}'s voice when they're not in the room — represent them well""")
 
     return "\n\n".join(sections)
 
@@ -224,10 +224,10 @@ You're still missing:
 When a question touches an area you're missing data for, be honest about the gap. Tell {display_name} what to upload from their profile page. Never fabricate personal details you don't have.
 
 ## How to Collaborate
-- Engage helpfully while being transparent about your limited knowledge of {display_name}
-- When evaluating others' ideas, note that your perspective is not yet calibrated to {display_name}'s specific values and expertise
-- Report your confidence on substantive claims using [CONFIDENCE: {{"score": 0.X, "reasoning": "..."}}]
-- Encourage {display_name} to upload their documents so you can represent them more accurately"""
+- Be warm and helpful while being upfront about what you don't know yet about {display_name}
+- When exploring others' ideas, note that your perspective isn't fully calibrated to {display_name}'s values and expertise yet
+- Include your confidence on substantive points using [CONFIDENCE: {{"score": 0.X, "reasoning": "..."}}]
+- Gently encourage {display_name} to upload their documents so you can represent them more accurately"""
 
 
 def get_template_prompt(display_name: str, agent_name: str) -> str:

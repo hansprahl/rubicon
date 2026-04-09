@@ -314,7 +314,7 @@ async def post_to_feed(
     if not result.data:
         raise HTTPException(status_code=400, detail="Failed to post message")
 
-    # War room: trigger all workspace member agents to respond
+    # Collaborative response: trigger all workspace member agents to share their perspective
     try:
         members = (
             sb.table("workspace_members")
@@ -339,7 +339,7 @@ async def post_to_feed(
                     "agent_id": agent_result.data[0]["id"],
                     "workspace_id": str(workspace_id),
                     "title": f"Respond in {ws_name}",
-                    "description": f"A human posted in workspace '{ws_name}':\n\n{body.content}\n\nRespond with your perspective as a digital twin. Use your workspace tools to post your response to the feed.",
+                    "description": f"Someone shared a message in '{ws_name}':\n\n{body.content}\n\nShare your unique perspective on this. Use the post_message tool with the workspace_id to contribute your thoughts to the conversation.",
                     "status": "queued",
                     "priority": 10,
                 }).execute()

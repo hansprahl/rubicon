@@ -60,17 +60,17 @@ def build_system_prompt(
 
     parts.extend([
         "",
-        "You have tools available to search workspaces, publish findings, create relationships, post messages, and more. Use them when the user's request requires action beyond conversation.",
+        "You have tools available to search workspaces, publish findings, create relationships, post messages, and more. Use them when the request calls for action beyond conversation.",
         "",
-        "IMPORTANT: End every final response with a confidence assessment in this exact format:",
+        "Please include a confidence assessment at the end of every response in this format:",
         '[CONFIDENCE: {"score": <0.0-1.0>, "reasoning": "<brief explanation>"}]',
         "",
-        "Score guidelines:",
-        "- 0.9-1.0: Factual, well-established, or directly from your knowledge base",
-        "- 0.7-0.89: Well-reasoned with strong supporting evidence",
-        "- 0.5-0.69: Reasonable inference but limited direct evidence",
-        "- 0.3-0.49: Speculative, working from partial information",
-        "- 0.0-0.29: Highly uncertain, flagging for human review",
+        "How to score your confidence:",
+        "- 0.9-1.0: Well-established fact or directly from your knowledge",
+        "- 0.7-0.89: Strong reasoning with solid supporting evidence",
+        "- 0.5-0.69: Reasonable take, but working with limited evidence",
+        "- 0.3-0.49: Early thinking — worth exploring further together",
+        "- 0.0-0.29: Not sure yet — would love your input on this one",
     ])
     return "\n".join(parts)
 

@@ -193,11 +193,11 @@ def _create_notification(
 
 
 def notify_approval_needed(user_id: str, action_type: str, agent_name: str) -> None:
-    """Notify user that an agent action needs approval."""
+    """Notify user that an agent action is ready for review."""
     _create_notification(
         user_id=user_id,
-        title=f"{agent_name} needs approval",
-        body=f"Action: {action_type.replace('_', ' ')}",
+        title=f"{agent_name} is ready for your review",
+        body=f"Wants to: {action_type.replace('_', ' ')}",
         category="approval",
         link="/approvals",
     )
@@ -206,11 +206,11 @@ def notify_approval_needed(user_id: str, action_type: str, agent_name: str) -> N
 def notify_disagreement(
     user_id: str, entity_name: str, workspace_name: str | None = None
 ) -> None:
-    """Notify user about a disagreement between agents."""
+    """Notify user about differing perspectives between agents."""
     _create_notification(
         user_id=user_id,
-        title=f"Disagreement on \"{entity_name}\"",
-        body=f"Agents disagree in {workspace_name or 'a workspace'}. Review needed.",
+        title=f"Different perspectives on \"{entity_name}\"",
+        body=f"Agents see this differently in {workspace_name or 'a workspace'} — your perspective would help.",
         category="disagreement",
         link="/approvals",
     )
@@ -222,8 +222,8 @@ def notify_milestone_change(
     """Notify user about a milestone status change."""
     _create_notification(
         user_id=user_id,
-        title=f"Milestone updated: {milestone_title[:50]}",
-        body=f"Status changed to {new_status.replace('_', ' ')}",
+        title=f"Milestone update: {milestone_title[:50]}",
+        body=f"Now {new_status.replace('_', ' ')}",
         category="milestone",
     )
 

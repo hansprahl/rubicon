@@ -20,12 +20,12 @@ from api.models.agent import ConfidenceScore
 from api.runtime.agent_manager import agent_manager
 from api.runtime.agent_worker import run_react_loop
 
-# Autonomy level thresholds — what requires approval at each level:
-#   1 = ask before everything (all actions need approval)
-#   2 = approve workspace actions (publish, message, relationships)
-#   3 = approve high-impact only (publish entities, update estimates)
-#   4 = approve destructive only (deletes, contradictions)
-#   5 = act freely (no approval needed)
+# Autonomy level thresholds — what needs your review at each level:
+#   1 = check in on everything (all actions reviewed by you)
+#   2 = review workspace actions (publishing, messaging, relationships)
+#   3 = review high-impact changes only (new findings, updated estimates)
+#   4 = review significant changes only (removals, conflicting views)
+#   5 = act independently (your agent handles it)
 AUTONOMY_THRESHOLDS: dict[str, int] = {
     "publish_entity": 2,
     "send_message": 2,
