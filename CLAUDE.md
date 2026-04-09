@@ -37,6 +37,11 @@ Run all migrations in order against your Supabase project via the SQL Editor or 
 2. `supabase/migrations/002_rls_policies.sql` — Row-level security policies
 3. `supabase/migrations/003_event_subscriptions.sql` — Event subscriptions
 4. `supabase/migrations/004_notifications_and_task_queue.sql` — Notifications + task queue columns
+5. `supabase/migrations/005_progressive_onboarding.sql` — Progressive onboarding columns
+6. `supabase/migrations/006_tool_repository.sql` — Tool repository + agent_tools (32 seeded tools)
+7. `supabase/migrations/007_north_star.sql` — North Star table with RLS policies
+8. `supabase/migrations/008_agent_repository.sql` — Custom agents repository with ratings and cloning
+9. `supabase/migrations/009_intelligence.sql` — Intelligence suggestions table with RLS
 
 ## Architecture
 
@@ -82,8 +87,12 @@ Run all migrations in order against your Supabase project via the SQL Editor or 
 - `apps/web/components/document-upload.tsx` — Drag-and-drop file upload with progress
 - `apps/web/components/workspace-card.tsx` — Workspace card with member count + role badge
 - `apps/web/components/approval-card.tsx` — Approval action card
+- `apps/web/components/anatomy-display.tsx` — Body-system anatomy visualization (full + compact modes)
+- `apps/web/components/tool-card.tsx` — Tool card with toggle, category badge, schema expand
+- `apps/web/app/tools/page.tsx` — Tool Repository browser (category tabs, search, enable/disable)
 - `apps/web/lib/supabase.ts` — Supabase client helpers (browser + server)
-- `apps/web/lib/api.ts` — FastAPI client (agents, chat, approvals, workspaces, graph, milestones, tasks, notifications)
+- `apps/web/app/north-star/page.tsx` — North Star page (guided wizard, view, edit modes)
+- `apps/web/lib/api.ts` — FastAPI client (agents, chat, approvals, workspaces, graph, milestones, tasks, notifications, anatomy, tools, north-star, agent-repo)
 - `apps/web/lib/realtime.ts` — Supabase Realtime subscription hooks
 - `api/main.py` — FastAPI app with CORS, routers, lifespan (starts task queue worker)
 - `api/config.py` — Environment config via pydantic-settings
@@ -93,10 +102,25 @@ Run all migrations in order against your Supabase project via the SQL Editor or 
 - `api/routes/milestones.py` — Milestone CRUD + agent task endpoints
 - `api/routes/events.py` — Event history, subscriptions, and disagreement API endpoints
 - `api/routes/notifications.py` — Notification list, unread count, mark read
+- `api/routes/north_star.py` — North Star API (CRUD, guided synthesis, dynamic questions)
 - `api/routes/onboarding.py` — Document upload, parsing, and agent synthesis
 - `api/runtime/task_queue.py` — Background task queue with priority, retries, notification triggers
-- `api/runtime/agent_worker.py` — ReAct agent loop using Claude API
+- `api/routes/anatomy.py` — Anatomy API endpoints (full body scan, heartbeat)
+- `api/runtime/agent_worker.py` — ReAct agent loop using Claude API with tool_use
 - `api/runtime/agent_manager.py` — Agent instance lifecycle management
+- `api/runtime/anatomy.py` — Anatomy Doctrine framework (10 body systems incl. Soul, health computation)
+- `api/runtime/tool_executor.py` — Core agent tool dispatch (8 tools: search, publish, relationships, messages, tasks, profile)
+- `api/runtime/repo_tool_executor.py` — Repository tool executor (32 tools via Claude with agent perspective)
+- `api/routes/tool_repository.py` — Tool Repository API (browse, enable/disable, bulk operations)
+- `api/routes/agent_repository.py` — Agent Repository API (build, browse, clone, rate custom agents)
+- `apps/web/app/agent-repo/page.tsx` — Agent Repository browser (search, filter, enable/disable)
+- `apps/web/app/agent-repo/build/page.tsx` — Agent Builder wizard (6-step guided creation)
+- `apps/web/app/agent-repo/[id]/page.tsx` — Agent detail page (reviews, enable, rate)
+- `apps/web/components/custom-agent-card.tsx` — Custom agent card with toggle, badges, rating
+- `api/runtime/rubicon_intelligence.py` — Rubicon Intelligence engine (suggestions, digest, trends)
+- `api/routes/intelligence.py` — Intelligence API (suggestions, digest, trends, checks)
+- `apps/web/app/intelligence/page.tsx` — Cohort Insights page (trends, digest, What's New)
+- `apps/web/components/suggestions-panel.tsx` — Personalized suggestions cards for dashboard
 - `api/runtime/inter_agent.py` — Agent-to-agent messaging, entity evaluation, disagreement detection
 - `api/doctrine/orchestrator.py` — Doctrine-powered agent orchestrator with approval notifications
 - `api/doctrine/confidence.py` — Confidence scoring for agent outputs
@@ -110,10 +134,16 @@ Run all migrations in order against your Supabase project via the SQL Editor or 
 - `api/models/workspace.py` — Pydantic models for workspaces, feed, entities, relationships
 - `api/models/event.py` — Pydantic models for events, subscriptions, disagreements
 - `api/models/milestone.py` — Pydantic models for milestones and agent tasks
+- `apps/web/lib/api.ts` — includes Intelligence types (Suggestion, CohortDigest, CohortTrends) and functions
 - `supabase/migrations/001_initial_schema.sql` — Core tables + indexes + RLS enables
 - `supabase/migrations/002_rls_policies.sql` — Row-level security policies
 - `supabase/migrations/003_event_subscriptions.sql` — Event subscriptions table
 - `supabase/migrations/004_notifications_and_task_queue.sql` — Notifications table + task queue columns
+- `supabase/migrations/005_progressive_onboarding.sql` — Progressive onboarding columns
+- `supabase/migrations/006_tool_repository.sql` — Tool repository + agent_tools tables (32 seeded tools)
+- `supabase/migrations/007_north_star.sql` — North Star table with RLS policies
+- `supabase/migrations/008_agent_repository.sql` — Custom agents, user_custom_agents, agent_ratings with RLS
+- `supabase/migrations/009_intelligence.sql` — Intelligence suggestions table with RLS
 
 ## Environment Variables
 See `.env.example` for all required vars. The frontend needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.

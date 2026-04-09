@@ -9,13 +9,19 @@ import {
   FolderOpen,
   CheckCircle,
   GitFork,
+  Wrench,
+  Package,
+  TrendingUp,
   User,
+  Star,
   LogOut,
   Menu,
   X,
+  MessageSquarePlus,
+  Shield,
 } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
-import { getApprovalCount } from "@/lib/api";
+import { getApprovalCount, checkUserStatus } from "@/lib/api";
 import { useRealtimeApprovals } from "@/lib/realtime";
 import { NotificationBell } from "@/components/notification-bell";
 import { cn } from "@/lib/utils";
@@ -26,13 +32,19 @@ const navItems = [
   { href: "/workspaces", label: "Workspaces", icon: FolderOpen },
   { href: "/approvals", label: "Approvals", icon: CheckCircle },
   { href: "/graph", label: "Knowledge Graph", icon: GitFork },
+  { href: "/tools", label: "Tools", icon: Wrench },
+  { href: "/agent-repo", label: "Agent Repo", icon: Package },
+  { href: "/intelligence", label: "Insights", icon: TrendingUp },
   { href: "/profile", label: "Profile", icon: User },
+  { href: "/north-star", label: "North Star", icon: Star },
+  { href: "/feedback", label: "Feedback", icon: MessageSquarePlus },
 ];
 
 export function NavSidebar() {
   const pathname = usePathname();
   const [pendingCount, setPendingCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const refreshCount = useCallback(async (uid: string) => {
@@ -53,6 +65,12 @@ export function NavSidebar() {
       if (!user) return;
       setUserId(user.id);
       refreshCount(user.id);
+      try {
+        const statusData = await checkUserStatus(user.id);
+        setIsAdmin(statusData.is_admin);
+      } catch {
+        // ignore
+      }
     }
     init();
   }, [refreshCount]);
@@ -90,7 +108,7 @@ export function NavSidebar() {
         </div>
       </div>
       <nav className="flex-1 space-y-1 p-3">
-        {navItems.map((item) => {
+        {[...navItems, ...(isAdmin ? [{ href: "/admin/users", label: "Admin", icon: Shield }] : [])].map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href;
           const showBadge =

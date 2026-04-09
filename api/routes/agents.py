@@ -16,6 +16,7 @@ from api.models.agent import (
     ChatMessage,
     ChatResponse,
 )
+from api.runtime.prompt_builder import get_template_prompt
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -27,6 +28,71 @@ def _supabase():
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
+
+
+@router.post("/ensure/{user_id}")
+async def ensure_agent(user_id: UUID):
+    """Ensure a user and template agent exist. Idempotent — safe to call on every login."""
+    sb = _supabase()
+
+    # Check if agent already exists
+    existing = sb.table("agent_profiles").select("id").eq("user_id", str(user_id)).execute()
+    if existing.data:
+        return {"status": "exists", "agent_id": existing.data[0]["id"]}
+
+    # Get user info from Supabase Auth
+    auth_user = sb.auth.admin.get_user_by_id(str(user_id))
+    email = auth_user.user.email or ""
+    meta = auth_user.user.user_metadata or {}
+    display_name = meta.get("full_name") or meta.get("name") or email.split("@")[0]
+    avatar_url = meta.get("avatar_url") or meta.get("picture") or ""
+
+    # Ensure users row exists
+    user_exists = sb.table("users").select("id").eq("id", str(user_id)).execute()
+    if not user_exists.data:
+        sb.table("users").insert({
+            "id": str(user_id),
+            "display_name": display_name,
+            "email": email,
+            "avatar_url": avatar_url,
+            "status": "pending",
+        }).execute()
+
+        # Notify admins about new signup
+        try:
+            admins = sb.table("users").select("id").eq("is_admin", True).execute()
+            for admin in (admins.data or []):
+                sb.table("notifications").insert({
+                    "user_id": admin["id"],
+                    "title": "New user signup",
+                    "body": f"{display_name} ({email}) is waiting for approval.",
+                    "category": "info",
+                    "link": "/admin/users",
+                }).execute()
+        except Exception:
+            pass  # Notification is nice-to-have
+
+    # Create template agent
+    agent_name = f"{display_name}'s Agent"
+    system_prompt = get_template_prompt(display_name, agent_name)
+
+    result = sb.table("agent_profiles").insert({
+        "user_id": str(user_id),
+        "agent_name": agent_name,
+        "expertise": [],
+        "goals": [],
+        "values": [],
+        "personality": {},
+        "communication_style": None,
+        "system_prompt": system_prompt,
+        "autonomy_level": 2,
+        "fidelity": 0.2,
+    }).execute()
+
+    if not result.data:
+        return {"status": "error", "detail": "Failed to create template agent"}
+
+    return {"status": "created", "agent_id": result.data[0]["id"]}
 
 
 @router.post("/", response_model=AgentProfile, status_code=201)
@@ -123,6 +189,7 @@ async def chat_with_agent(agent_id: UUID, body: ChatMessage):
             communication_style=agent.get("communication_style"),
             system_prompt=agent.get("system_prompt"),
             user_message=body.content,
+            user_id=agent["user_id"],
         )
 
         # Save agent response

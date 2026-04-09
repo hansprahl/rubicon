@@ -26,6 +26,7 @@ class AgentManager:
         values: list[str],
         communication_style: str | None,
         system_prompt: str | None,
+        user_id: str = "",
     ) -> AgentContext:
         """Return existing context or create a new one for this agent."""
         if agent_id not in self._agents:
@@ -40,6 +41,8 @@ class AgentManager:
             self._agents[agent_id] = AgentContext(
                 agent_name=agent_name,
                 system_prompt=full_prompt,
+                agent_id=str(agent_id),
+                user_id=user_id,
             )
         return self._agents[agent_id]
 

@@ -60,3 +60,4 @@ class OnboardingProfileRequest(BaseModel):
 class OnboardingSynthesizeRequest(BaseModel):
     agent_name: str
     autonomy_level: int = Field(default=2, ge=1, le=5)
+    enrichment_answers: dict[str, str] | None = None

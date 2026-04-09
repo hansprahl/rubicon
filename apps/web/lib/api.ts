@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -26,8 +26,15 @@ export interface AgentProfile {
   system_prompt: string | null;
   autonomy_level: number;
   status: "idle" | "thinking" | "working" | "waiting_approval";
+  fidelity?: number;
   created_at: string;
   updated_at: string;
+}
+
+export function ensureAgent(userId: string) {
+  return request<{ status: string; agent_id: string }>(`/agents/ensure/${userId}`, {
+    method: "POST",
+  });
 }
 
 export function getAgent(agentId: string) {
@@ -533,6 +540,96 @@ export function markAllNotificationsRead(userId: string) {
   });
 }
 
+// --- North Star ---
+
+export interface NorthStar {
+  id: string;
+  user_id: string;
+  mission: string;
+  principles: { title: string; description: string }[];
+  vision: string | null;
+  non_negotiables: string[];
+  synthesis_source: Record<string, boolean>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GuidedQuestion {
+  id: string;
+  question: string;
+  context?: string;
+  required: boolean;
+}
+
+export function getNorthStar(userId: string) {
+  return request<NorthStar>(`/north-star/${userId}`);
+}
+
+export function saveNorthStar(
+  userId: string,
+  data: { mission: string; principles: { title: string; description: string }[]; vision?: string | null; non_negotiables: string[] }
+) {
+  return request<NorthStar>(`/north-star/${userId}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function guidedSynthesis(userId: string, answers: Record<string, string>) {
+  return request<NorthStar>(`/north-star/${userId}/guided`, {
+    method: "POST",
+    body: JSON.stringify({ answers }),
+  });
+}
+
+export function getNorthStarQuestions(userId: string) {
+  return request<{ questions: GuidedQuestion[] }>(`/north-star/${userId}/questions`);
+}
+
+export function deleteNorthStar(userId: string) {
+  return request<{ status: string }>(`/north-star/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+// --- Anatomy ---
+
+export interface BodySystem {
+  name: string;
+  status: "dormant" | "developing" | "active" | "strong";
+  health: number;
+  detail: string;
+}
+
+export interface AgentAnatomy {
+  soul: BodySystem;
+  brain: BodySystem;
+  heart: BodySystem;
+  voice: BodySystem;
+  gut: BodySystem;
+  hands: BodySystem;
+  muscle: BodySystem;
+  connective_tissue: BodySystem;
+  skin: BodySystem;
+  blood: BodySystem;
+  heartbeat: {
+    status: string;
+    bpm: number;
+    health: number;
+  };
+  overall_health: number;
+}
+
+export function getAnatomy(userId: string) {
+  return request<AgentAnatomy>(`/anatomy/${userId}`);
+}
+
+export function getHeartbeat(userId: string) {
+  return request<{ heartbeat: { status: string; bpm: number; health: number }; overall_health: number }>(
+    `/anatomy/${userId}/heartbeat`
+  );
+}
+
 // --- Agent Profile Update ---
 
 export function updateAgent(
@@ -552,18 +649,374 @@ export function updateAgent(
   });
 }
 
+// --- Tool Repository ---
+
+export interface RepoTool {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string;
+  category: string;
+  icon: string;
+  is_workspace_aware: boolean;
+  requires_google: boolean;
+  input_schema: Record<string, unknown>;
+  enabled_at?: string;
+}
+
+export function listTools(category?: string) {
+  const params = category ? `?category=${category}` : "";
+  return request<RepoTool[]>(`/tools${params}`);
+}
+
+export function getAgentTools(agentId: string) {
+  return request<RepoTool[]>(`/tools/agent/${agentId}`);
+}
+
+export function enableTool(agentId: string, toolId: string) {
+  return request<{ status: string }>(`/tools/agent/${agentId}/${toolId}`, { method: "POST" });
+}
+
+export function disableTool(agentId: string, toolId: string) {
+  return request<{ status: string }>(`/tools/agent/${agentId}/${toolId}`, { method: "DELETE" });
+}
+
+export function bulkEnableTools(agentId: string, toolIds: string[]) {
+  return request<{ status: string }>(`/tools/agent/${agentId}/bulk`, {
+    method: "POST",
+    body: JSON.stringify({ tool_ids: toolIds }),
+  });
+}
+
+export function getToolCategories() {
+  return request<{ category: string; count: number }[]>(`/tools/categories`);
+}
+
+// --- Custom Agent Repository ---
+
+export interface CustomAgent {
+  id: string;
+  created_by: string;
+  name: string;
+  description: string;
+  purpose: string;
+  expertise: string[];
+  system_prompt: string;
+  tools: string[];
+  category: string;
+  icon: string;
+  visibility: "private" | "workspace" | "cohort";
+  workspace_id: string | null;
+  clone_count: number;
+  rating_sum: number;
+  rating_count: number;
+  status: "active" | "draft" | "archived";
+  doctrine_components: Record<string, boolean>;
+  created_at: string;
+  updated_at: string;
+  creator_name?: string;
+  enabled_at?: string;
+  reviews?: AgentReview[];
+}
+
+export interface AgentReview {
+  id: string;
+  user_id: string;
+  custom_agent_id: string;
+  rating: number;
+  review: string | null;
+  created_at: string;
+  reviewer_name?: string;
+}
+
+export interface BuildAgentPayload {
+  name: string;
+  purpose: string;
+  category: string;
+  expertise: string[];
+  tools: string[];
+  visibility: string;
+  workspace_id: string | null;
+  doctrine_config: {
+    confidence_scoring: boolean;
+    knowledge_graph: boolean;
+    approval_required: boolean;
+    proactive: boolean;
+  };
+  icon: string;
+}
+
+export function listCustomAgents(options?: {
+  category?: string;
+  visibility?: string;
+  search?: string;
+  sort?: string;
+  user_id?: string;
+}) {
+  const params = new URLSearchParams();
+  if (options?.category) params.set("category", options.category);
+  if (options?.visibility) params.set("visibility", options.visibility);
+  if (options?.search) params.set("search", options.search);
+  if (options?.sort) params.set("sort", options.sort);
+  if (options?.user_id) params.set("user_id", options.user_id);
+  const qs = params.toString();
+  return request<CustomAgent[]>(`/agent-repo${qs ? `?${qs}` : ""}`);
+}
+
+export function getCustomAgent(agentId: string) {
+  return request<CustomAgent>(`/agent-repo/${agentId}`);
+}
+
+export function createCustomAgent(userId: string, data: {
+  name: string;
+  description: string;
+  purpose: string;
+  expertise: string[];
+  tools: string[];
+  category: string;
+  icon: string;
+  visibility: string;
+  workspace_id: string | null;
+  doctrine_components: Record<string, boolean>;
+}) {
+  return request<CustomAgent>(`/agent-repo?user_id=${userId}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function buildCustomAgent(userId: string, data: BuildAgentPayload) {
+  return request<CustomAgent>(`/agent-repo/build?user_id=${userId}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateCustomAgent(agentId: string, userId: string, data: Partial<CustomAgent>) {
+  return request<CustomAgent>(`/agent-repo/${agentId}?user_id=${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteCustomAgent(agentId: string, userId: string) {
+  return request<{ status: string }>(`/agent-repo/${agentId}?user_id=${userId}`, {
+    method: "DELETE",
+  });
+}
+
+export function cloneCustomAgent(agentId: string, userId: string) {
+  return request<{ status: string; clone_count: number }>(`/agent-repo/${agentId}/clone?user_id=${userId}`, {
+    method: "POST",
+  });
+}
+
+export function uncloneCustomAgent(agentId: string, userId: string) {
+  return request<{ status: string }>(`/agent-repo/${agentId}/clone?user_id=${userId}`, {
+    method: "DELETE",
+  });
+}
+
+export function rateCustomAgent(agentId: string, userId: string, rating: number, review?: string) {
+  return request<{ status: string; average_rating: number; rating_count: number }>(
+    `/agent-repo/${agentId}/rate?user_id=${userId}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ rating, review: review || null }),
+    }
+  );
+}
+
+export function getAgentRepoCategories() {
+  return request<{ category: string; count: number }[]>(`/agent-repo/categories`);
+}
+
+export function getMyCustomAgents(userId: string) {
+  return request<CustomAgent[]>(`/agent-repo/my-agents?user_id=${userId}`);
+}
+
+export function getMyEnabledAgents(userId: string) {
+  return request<CustomAgent[]>(`/agent-repo/my-enabled?user_id=${userId}`);
+}
+
+// --- Intelligence ---
+
+export interface Suggestion {
+  id: string;
+  user_id: string | null;
+  suggestion_type: "tool" | "agent" | "fidelity" | "north_star" | "workspace" | "creation";
+  title: string;
+  body: string;
+  action_url: string | null;
+  priority: number;
+  dismissed: boolean;
+  created_at: string;
+}
+
+export interface CohortDigest {
+  new_agents: { name: string; creator: string; id: string }[];
+  trending_tools: { name: string; display_name: string; usage_count: number }[];
+  active_workspaces: { name: string; id: string; message_count: number }[];
+  suggested_creations: string[];
+}
+
+export interface CohortTrends {
+  top_tools: { name: string; display_name: string; enabled_count: number }[];
+  active_workspaces: { name: string; id: string; member_count: number; recent_messages: number }[];
+  trending_agents: { name: string; id: string; clone_count: number; avg_rating: number }[];
+  cohort_stats: { total_users: number; agents_with_north_star: number; avg_fidelity: number; total_custom_agents: number };
+}
+
+export function getSuggestions(userId: string) {
+  return request<Suggestion[]>(`/intelligence/suggestions/${userId}`);
+}
+
+export function dismissSuggestion(suggestionId: string) {
+  return request<{ status: string }>(`/intelligence/suggestions/${suggestionId}/dismiss`, {
+    method: "POST",
+  });
+}
+
+export function getCohortDigest() {
+  return request<CohortDigest>(`/intelligence/digest`);
+}
+
+export function getCohortTrends() {
+  return request<CohortTrends>(`/intelligence/trends`);
+}
+
+export function triggerIntelligenceCheck(userId: string) {
+  return request<{ users_checked: number; suggestions_created: number }>(
+    `/intelligence/check/${userId}`,
+    { method: "POST" }
+  );
+}
+
+// --- Onboarding ---
+
+// --- Feedback ---
+
+export interface Feedback {
+  id: string;
+  user_id: string;
+  type: "bug" | "feature" | "improvement" | "general";
+  title: string;
+  body: string;
+  page_url: string | null;
+  status: "open" | "in_review" | "planned" | "fixed" | "closed" | "wont_fix";
+  priority: "low" | "normal" | "high" | "critical";
+  upvotes: number;
+  created_at: string;
+  updated_at: string;
+  user_upvoted?: boolean;
+  users?: { display_name: string | null };
+}
+
+export interface FeedbackStats {
+  total: number;
+  open_bugs: number;
+  open_features: number;
+  open_improvements: number;
+  by_status: Record<string, number>;
+  by_type: Record<string, number>;
+}
+
+export function listFeedback(options?: {
+  type?: string;
+  status?: string;
+  sort?: string;
+  userId?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (options?.type) params.set("type", options.type);
+  if (options?.status) params.set("status", options.status);
+  if (options?.sort) params.set("sort", options.sort);
+  if (options?.userId) params.set("user_id", options.userId);
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.offset) params.set("offset", String(options.offset));
+  const qs = params.toString();
+  return request<Feedback[]>(`/feedback${qs ? `?${qs}` : ""}`);
+}
+
+export function createFeedback(
+  userId: string,
+  data: { type: string; title: string; body: string; page_url?: string }
+) {
+  return request<Feedback>(`/feedback?user_id=${userId}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function upvoteFeedback(feedbackId: string, userId: string) {
+  return request<{ upvoted: boolean; upvotes: number }>(
+    `/feedback/${feedbackId}/upvote?user_id=${userId}`,
+    { method: "POST" }
+  );
+}
+
+export function getFeedbackStats() {
+  return request<FeedbackStats>(`/feedback/stats`);
+}
+
+// --- Onboarding ---
+
+// --- Admin ---
+
+export interface AdminUser {
+  id: string;
+  display_name: string;
+  email: string;
+  avatar_url: string | null;
+  status: "pending" | "approved" | "rejected";
+  is_admin: boolean;
+  cohort: string;
+  created_at: string;
+  agent_name: string | null;
+  fidelity: number | null;
+}
+
+export function getAdminUsers(adminId: string) {
+  return request<AdminUser[]>(`/admin/users?admin_id=${adminId}`);
+}
+
+export function updateUserStatus(userId: string, status: "approved" | "rejected", adminId: string) {
+  return request<{ status: string; user_id: string; new_status: string }>(
+    `/admin/users/${userId}/status?admin_id=${adminId}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }
+  );
+}
+
+export function toggleUserAdmin(userId: string, adminId: string) {
+  return request<{ status: string; user_id: string; is_admin: boolean }>(
+    `/admin/users/${userId}/admin?admin_id=${adminId}`,
+    { method: "POST" }
+  );
+}
+
+export function checkUserStatus(userId: string) {
+  return request<{ status: string; is_admin: boolean }>(`/admin/users/${userId}/check`);
+}
+
 // --- Onboarding ---
 
 export function synthesizeProfile(
   userId: string,
   agentName: string,
-  autonomyLevel: number
+  autonomyLevel: number,
+  enrichmentAnswers?: Record<string, string>
 ) {
   return request<Record<string, unknown>>(`/onboarding/synthesize/${userId}`, {
     method: "POST",
     body: JSON.stringify({
       agent_name: agentName,
       autonomy_level: autonomyLevel,
+      enrichment_answers: enrichmentAnswers,
     }),
   });
 }

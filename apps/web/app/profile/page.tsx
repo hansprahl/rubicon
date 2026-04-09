@@ -20,8 +20,10 @@ import {
   uploadOnboardingDoc,
   synthesizeProfile,
   getNotifications,
+  getAnatomy,
 } from "@/lib/api";
-import type { AgentProfile, OnboardingDocData, Notification } from "@/lib/api";
+import type { AgentProfile, OnboardingDocData, Notification, AgentAnatomy } from "@/lib/api";
+import { AnatomyDisplay } from "@/components/anatomy-display";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { useRealtimeAgentStatus } from "@/lib/realtime";
 
@@ -37,6 +39,7 @@ export default function ProfilePage() {
   const [reuploadType, setReuploadType] = useState<"idp" | "ethics" | "insights" | null>(null);
   const [reuploadState, setReuploadState] = useState({ uploading: false, progress: 0, uploaded: false, fileName: "" });
   const [showActivity, setShowActivity] = useState(false);
+  const [anatomy, setAnatomy] = useState<AgentAnatomy | null>(null);
 
   // Editable fields
   const [agentName, setAgentName] = useState("");
@@ -48,14 +51,16 @@ export default function ProfilePage() {
 
   const loadProfile = useCallback(async (uid: string) => {
     try {
-      const [profile, uploadedDocs, notifs] = await Promise.all([
+      const [profile, uploadedDocs, notifs, anatomyData] = await Promise.all([
         getAgentByUser(uid),
         getOnboardingDocs(uid).catch(() => []),
         getNotifications(uid, false, 20).catch(() => []),
+        getAnatomy(uid).catch(() => null),
       ]);
       setAgent(profile);
       setDocs(uploadedDocs);
       setActivity(notifs);
+      setAnatomy(anatomyData);
 
       // Populate editable fields
       setAgentName(profile.agent_name);
@@ -206,6 +211,14 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
+
+            {/* Anatomy */}
+            {anatomy && (
+              <div className="rounded-lg border bg-card p-5">
+                <h2 className="mb-4 font-medium">Agent Anatomy</h2>
+                <AnatomyDisplay anatomy={anatomy} />
+              </div>
+            )}
 
             {/* Extracted Profile */}
             <div className="rounded-lg border bg-card p-5">

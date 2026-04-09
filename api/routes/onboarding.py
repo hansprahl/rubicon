@@ -22,6 +22,7 @@ from api.models.onboarding import (
 from api.parsers.idp_parser import parse_idp
 from api.parsers.ethics_parser import parse_ethics
 from api.parsers.insights_parser import parse_insights
+from api.runtime.prompt_builder import build_progressive_prompt, calculate_fidelity
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
@@ -123,11 +124,11 @@ async def setup_profile(user_id: UUID, body: OnboardingProfileRequest):
     """Create or update the user's display name and avatar."""
     sb = _supabase()
 
-    # Upsert into users table
-    data = {"id": str(user_id), "display_name": body.display_name}
-    if body.avatar_url:
-        data["avatar_url"] = body.avatar_url
+    # Get email from auth.users
+    auth_user = sb.auth.admin.get_user_by_id(str(user_id))
+    email = auth_user.user.email or ""
 
+    # Try update first
     result = (
         sb.table("users")
         .update({"display_name": body.display_name, "avatar_url": body.avatar_url})
@@ -135,8 +136,21 @@ async def setup_profile(user_id: UUID, body: OnboardingProfileRequest):
         .execute()
     )
 
+    # If no row existed, insert
     if not result.data:
-        raise HTTPException(status_code=404, detail="User not found")
+        result = (
+            sb.table("users")
+            .insert({
+                "id": str(user_id),
+                "display_name": body.display_name,
+                "email": email,
+                "avatar_url": body.avatar_url,
+            })
+            .execute()
+        )
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to create user profile")
 
     return {"status": "ok", "display_name": body.display_name}
 
@@ -202,7 +216,90 @@ async def upload_document(
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to save document record")
 
+    # Incrementally rebuild the agent's system prompt
+    await _rebuild_agent_prompt(sb, str(user_id))
+
     return result.data[0]
+
+
+async def _rebuild_agent_prompt(sb, user_id: str):
+    """Rebuild the agent's system prompt from all currently uploaded docs."""
+    # Get agent profile
+    agent_result = sb.table("agent_profiles").select("*").eq("user_id", user_id).execute()
+    if not agent_result.data:
+        return  # No agent yet — will be rebuilt when agent is created
+
+    agent = agent_result.data[0]
+
+    # Get user info
+    user_result = sb.table("users").select("display_name").eq("id", user_id).execute()
+    display_name = user_result.data[0]["display_name"] if user_result.data else "Unknown"
+
+    # Get all uploaded docs
+    docs_result = sb.table("onboarding_docs").select("*").eq("user_id", user_id).execute()
+    docs_by_type = {doc["doc_type"]: doc["parsed_data"] for doc in docs_result.data}
+
+    idp_data = docs_by_type.get("idp")
+    ethics_data = docs_by_type.get("ethics")
+    insights_data = docs_by_type.get("insights")
+    enrichment = agent.get("enrichment_answers") or {}
+    enrichment = enrichment if enrichment != {} else None
+    google_services = agent.get("google_services") or []
+
+    # Fetch North Star (Soul layer)
+    north_star_data = None
+    try:
+        ns_result = sb.table("north_stars").select("*").eq("user_id", user_id).execute()
+        if ns_result.data:
+            north_star_data = ns_result.data[0]
+    except Exception:
+        pass  # Table may not exist yet
+
+    # Build new prompt
+    new_prompt = build_progressive_prompt(
+        display_name=display_name,
+        agent_name=agent["agent_name"],
+        idp_data=idp_data,
+        ethics_data=ethics_data,
+        insights_data=insights_data,
+        enrichment_answers=enrichment,
+        google_services=google_services if google_services else None,
+        north_star=north_star_data,
+    )
+
+    # Calculate new fidelity
+    fidelity = calculate_fidelity(
+        has_idp=bool(idp_data),
+        has_ethics=bool(ethics_data),
+        has_insights=bool(insights_data),
+        has_enrichment=bool(enrichment),
+        has_google=bool(google_services),
+    )
+
+    # Update agent profile fields based on uploaded docs
+    update_data: dict = {
+        "system_prompt": new_prompt,
+        "fidelity": fidelity,
+    }
+
+    if idp_data:
+        update_data["expertise"] = idp_data.get("expertise", []) + idp_data.get("leadership_priorities", [])
+        update_data["goals"] = idp_data.get("goals", []) + idp_data.get("development_areas", [])
+
+    if ethics_data:
+        update_data["values"] = ethics_data.get("values", []) + ethics_data.get("key_principles", [])
+
+    if insights_data:
+        update_data["personality"] = {
+            "primary_color": insights_data.get("primary_color", ""),
+            "secondary_color": insights_data.get("secondary_color", ""),
+            "color_scores": insights_data.get("color_scores", {}),
+            "strengths": insights_data.get("strengths", []),
+            "personality_summary": insights_data.get("personality_summary", ""),
+        }
+        update_data["communication_style"] = insights_data.get("communication_style", "")
+
+    sb.table("agent_profiles").update(update_data).eq("id", agent["id"]).execute()
 
 
 # ---------------------------------------------------------------------------
@@ -234,9 +331,30 @@ async def _synthesize_system_prompt(
     idp_data: dict,
     ethics_data: dict,
     insights_data: dict,
+    enrichment_answers: dict[str, str] | None = None,
 ) -> str:
-    """Use Claude to synthesize a personalized system prompt from all three documents."""
+    """Use Claude to synthesize a personalized system prompt from all three documents + enrichment."""
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+    enrichment_section = ""
+    if enrichment_answers:
+        question_map = {
+            "current_work": "What they're building/working on right now",
+            "biggest_bet": "Their biggest professional bet or conviction",
+            "decision_framework": "How they make important decisions",
+            "superpower": "What people come to them for",
+            "blind_spot": "What they're actively working to improve",
+            "north_star": "What success looks like in 5 years",
+        }
+        lines = []
+        for key, answer in enrichment_answers.items():
+            label = question_map.get(key, key)
+            lines.append(f"- {label}: {answer}")
+        enrichment_section = f"""
+
+## Deeper Context (self-reported)
+{chr(10).join(lines)}
+"""
 
     synthesis_prompt = f"""\
 You are building a system prompt for an AI agent that is a digital twin of {display_name}.
@@ -264,13 +382,14 @@ Secondary Color: {insights_data.get('secondary_color', '')}
 Strengths: {insights_data.get('strengths', [])}
 Communication Style: {insights_data.get('communication_style', '')}
 Personality Summary: {insights_data.get('personality_summary', '')}
-
-Write a detailed system prompt (300-500 words) for this agent. The prompt should:
+{enrichment_section}
+Write a detailed system prompt (400-600 words) for this agent. The prompt should:
 1. Define the agent's identity and role as {display_name}'s digital twin
 2. Incorporate their goals, values, and personality
 3. Guide how the agent communicates (matching their Insights profile)
 4. Specify how the agent approaches decisions (based on their ethical framework)
 5. Include their areas of expertise and development goals
+6. If deeper context was provided, weave in their current work, convictions, decision-making approach, and vision — this is what makes the agent sound like them today, not just who they are on paper
 
 Return ONLY the system prompt text, no other commentary.
 """
@@ -315,22 +434,27 @@ async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
         idp_data=idp_data,
         ethics_data=ethics_data,
         insights_data=insights_data,
+        enrichment_answers=body.enrichment_answers,
     )
 
     # Build profile
+    personality_data = {
+        "primary_color": insights_data.get("primary_color", ""),
+        "secondary_color": insights_data.get("secondary_color", ""),
+        "color_scores": insights_data.get("color_scores", {}),
+        "strengths": insights_data.get("strengths", []),
+        "personality_summary": insights_data.get("personality_summary", ""),
+    }
+    if body.enrichment_answers:
+        personality_data["enrichment"] = body.enrichment_answers
+
     profile_data = {
         "user_id": str(user_id),
         "agent_name": body.agent_name,
         "expertise": idp_data.get("expertise", []) + idp_data.get("leadership_priorities", []),
         "goals": idp_data.get("goals", []) + idp_data.get("development_areas", []),
         "values": ethics_data.get("values", []) + ethics_data.get("key_principles", []),
-        "personality": {
-            "primary_color": insights_data.get("primary_color", ""),
-            "secondary_color": insights_data.get("secondary_color", ""),
-            "color_scores": insights_data.get("color_scores", {}),
-            "strengths": insights_data.get("strengths", []),
-            "personality_summary": insights_data.get("personality_summary", ""),
-        },
+        "personality": personality_data,
         "communication_style": insights_data.get("communication_style", ""),
         "system_prompt": system_prompt,
         "autonomy_level": body.autonomy_level,

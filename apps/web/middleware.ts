@@ -26,39 +26,57 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Not logged in — redirect to login (except login and auth callback pages)
-  if (!user && !pathname.startsWith("/login") && !pathname.startsWith("/auth")) {
+  // Public pages — no auth required
+  if (pathname.startsWith("/login") || pathname.startsWith("/auth") || pathname === "/pending") {
+    // If logged in user hits /login, send to dashboard
+    if (user && pathname.startsWith("/login")) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+    return response;
+  }
+
+  // Not logged in — redirect to login
+  if (!user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Logged in user on login page — redirect to dashboard
-  if (user && pathname.startsWith("/login")) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
+  // Check approval status via API
+  // Admin pages are only for admins (checked server-side too, but redirect here for UX)
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api";
+  try {
+    const statusRes = await fetch(`${apiBase}/admin/users/${user.id}/check`, {
+      headers: { "Content-Type": "application/json" },
+    });
+    if (statusRes.ok) {
+      const data = await statusRes.json();
 
-  // Logged in user on a protected page (not onboarding) — check if they have an agent profile
-  if (
-    user &&
-    !pathname.startsWith("/login") &&
-    !pathname.startsWith("/onboarding") &&
-    !pathname.startsWith("/auth") &&
-    !pathname.startsWith("/_next") &&
-    !pathname.startsWith("/api")
-  ) {
-    try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
-      const res = await fetch(`${apiBase}/onboarding/status/${user.id}`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      if (res.ok) {
-        const status = await res.json();
-        if (!status.completed) {
-          return NextResponse.redirect(new URL("/onboarding", request.url));
-        }
+      // User not yet in public.users — let them through to trigger ensure_agent
+      if (data.status === "not_found") {
+        return response;
       }
-    } catch {
-      // If API is down, let them through rather than blocking
+
+      // Pending users can only see the /pending page
+      if (data.status === "pending" && pathname !== "/pending") {
+        return NextResponse.redirect(new URL("/pending", request.url));
+      }
+
+      // Rejected users go to /pending too (shows rejection message)
+      if (data.status === "rejected" && pathname !== "/pending") {
+        return NextResponse.redirect(new URL("/pending", request.url));
+      }
+
+      // Approved users on /pending — send to dashboard
+      if (data.status === "approved" && pathname === "/pending") {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
+
+      // Admin pages — only admins
+      if (pathname.startsWith("/admin") && !data.is_admin) {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
     }
+  } catch {
+    // If API is down, let them through (graceful degradation)
   }
 
   return response;

@@ -24,8 +24,10 @@ export function useRealtimeTable(
   onChangeRef.current = onChange;
 
   useEffect(() => {
+    if (!filter && !channelName) return;
+
     const supabase = createBrowserSupabaseClient();
-    const name = channelName || `rt-${table}-${filter || "all"}`;
+    const name = `${channelName || `rt-${table}-${filter || "all"}`}-${Date.now()}`;
 
     const channelConfig: Record<string, unknown> = {
       event: "*",
@@ -40,7 +42,7 @@ export function useRealtimeTable(
       .channel(name)
       .on(
         "postgres_changes",
-        channelConfig as Parameters<typeof channel.on>[1],
+        channelConfig as any,
         () => {
           onChangeRef.current();
         }
@@ -61,7 +63,7 @@ export function useRealtimeMessages(
 ) {
   const filterCol = entityType === "workspace" ? "workspace_id" : "agent_id";
   const filter = entityId ? `${filterCol}=eq.${entityId}` : null;
-  useRealtimeTable("messages", filter, onChange, `rt-messages-${entityId}`);
+  useRealtimeTable("messages", filter, onChange, entityId ? `rt-messages-${entityId}` : undefined);
 }
 
 /** Subscribe to approval changes for a user */
@@ -70,7 +72,7 @@ export function useRealtimeApprovals(
   onChange: ChangeCallback
 ) {
   const filter = userId ? `user_id=eq.${userId}` : null;
-  useRealtimeTable("approvals", filter, onChange, `rt-approvals-${userId}`);
+  useRealtimeTable("approvals", filter, onChange, userId ? `rt-approvals-${userId}` : undefined);
 }
 
 /** Subscribe to agent status changes */
@@ -79,7 +81,7 @@ export function useRealtimeAgentStatus(
   onChange: ChangeCallback
 ) {
   const filter = agentId ? `id=eq.${agentId}` : null;
-  useRealtimeTable("agent_profiles", filter, onChange, `rt-agent-${agentId}`);
+  useRealtimeTable("agent_profiles", filter, onChange, agentId ? `rt-agent-${agentId}` : undefined);
 }
 
 /** Subscribe to notification changes for a user */
@@ -88,7 +90,7 @@ export function useRealtimeNotifications(
   onChange: ChangeCallback
 ) {
   const filter = userId ? `user_id=eq.${userId}` : null;
-  useRealtimeTable("notifications", filter, onChange, `rt-notif-${userId}`);
+  useRealtimeTable("notifications", filter, onChange, userId ? `rt-notif-${userId}` : undefined);
 }
 
 /** Subscribe to task changes in a workspace */
@@ -97,7 +99,7 @@ export function useRealtimeTasks(
   onChange: ChangeCallback
 ) {
   const filter = workspaceId ? `workspace_id=eq.${workspaceId}` : null;
-  useRealtimeTable("agent_tasks", filter, onChange, `rt-tasks-${workspaceId}`);
+  useRealtimeTable("agent_tasks", filter, onChange, workspaceId ? `rt-tasks-${workspaceId}` : undefined);
 }
 
 /** Subscribe to feed (messages) in a workspace */
@@ -106,7 +108,7 @@ export function useRealtimeFeed(
   onChange: ChangeCallback
 ) {
   const filter = workspaceId ? `workspace_id=eq.${workspaceId}` : null;
-  useRealtimeTable("messages", filter, onChange, `rt-feed-${workspaceId}`);
+  useRealtimeTable("messages", filter, onChange, workspaceId ? `rt-feed-${workspaceId}` : undefined);
 }
 
 /** Subscribe to entity changes in a workspace */
@@ -115,5 +117,5 @@ export function useRealtimeEntities(
   onChange: ChangeCallback
 ) {
   const filter = workspaceId ? `workspace_id=eq.${workspaceId}` : null;
-  useRealtimeTable("shared_entities", filter, onChange, `rt-entities-${workspaceId}`);
+  useRealtimeTable("shared_entities", filter, onChange, workspaceId ? `rt-entities-${workspaceId}` : undefined);
 }

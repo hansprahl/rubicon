@@ -86,6 +86,7 @@ async def handle_chat(
     communication_style: str | None,
     system_prompt: str | None,
     user_message: str,
+    user_id: str = "",
 ) -> tuple[str, ConfidenceScore]:
     """Process a chat message through the full Doctrine pipeline.
 
@@ -100,6 +101,7 @@ async def handle_chat(
         values=values,
         communication_style=communication_style,
         system_prompt=system_prompt,
+        user_id=user_id,
     )
 
     # 2. Run the ReAct loop

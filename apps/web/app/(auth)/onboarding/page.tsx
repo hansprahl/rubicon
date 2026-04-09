@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { User, Upload, FileText, Eye, Bot, ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+import { User, Upload, FileText, Eye, Bot, ArrowLeft, ArrowRight, Loader2, Link2, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DocumentUpload } from "@/components/document-upload";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
@@ -16,11 +16,73 @@ import {
 
 const STEPS = [
   { title: "Your Profile", icon: User },
+  { title: "Connect Google", icon: Link2 },
   { title: "Upload IDP", icon: Upload },
   { title: "Upload Ethics Paper", icon: FileText },
   { title: "Upload Insights Profile", icon: FileText },
   { title: "Review Profile", icon: Eye },
+  { title: "Deeper Context", icon: FileText },
   { title: "Name Your Agent", icon: Bot },
+];
+
+const GOOGLE_SERVICES = [
+  {
+    id: "drive",
+    name: "Google Drive",
+    icon: "📁",
+    description: "Your agent can read documents you've shared or created — class materials, project files, notes. This helps it understand your work beyond the three EMBA papers.",
+    detail: "Read-only access. Your agent never modifies or deletes files.",
+    scope: "https://www.googleapis.com/auth/drive.readonly",
+  },
+  {
+    id: "calendar",
+    name: "Google Calendar",
+    icon: "📅",
+    description: "Your agent knows your schedule — when you're available, upcoming deadlines, class times. Useful when coordinating group work in shared workspaces.",
+    detail: "Read-only access. Your agent never creates or changes events.",
+    scope: "https://www.googleapis.com/auth/calendar.readonly",
+  },
+  {
+    id: "gmail",
+    name: "Gmail",
+    icon: "✉️",
+    description: "Your agent can surface relevant emails when working in shared workspaces — threads about group projects, professor feedback, cohort communications.",
+    detail: "Read-only access. Your agent never sends, deletes, or modifies emails. You can revoke access anytime.",
+    scope: "https://www.googleapis.com/auth/gmail.readonly",
+  },
+];
+
+const ENRICHMENT_QUESTIONS = [
+  {
+    id: "current_work",
+    question: "What are you building or working on right now?",
+    placeholder: "Projects, ventures, research, role at work...",
+  },
+  {
+    id: "biggest_bet",
+    question: "What's your biggest professional bet or conviction?",
+    placeholder: "The thing you believe that others might not...",
+  },
+  {
+    id: "decision_framework",
+    question: "How do you make important decisions?",
+    placeholder: "Frameworks, gut feel, data-driven, consult others...",
+  },
+  {
+    id: "superpower",
+    question: "What do people come to you for?",
+    placeholder: "The thing you're known for in your circles...",
+  },
+  {
+    id: "blind_spot",
+    question: "What's something you're actively working to improve?",
+    placeholder: "A growth area you're honest about...",
+  },
+  {
+    id: "north_star",
+    question: "What does success look like for you in 5 years?",
+    placeholder: "Not just career — life, impact, relationships...",
+  },
 ];
 
 export default function OnboardingPage() {
@@ -42,6 +104,17 @@ export default function OnboardingPage() {
 
   // Step 5: Review data
   const [parsedDocs, setParsedDocs] = useState<OnboardingDocData[]>([]);
+
+  // Step 1: Google connections
+  const [googleServices, setGoogleServices] = useState<Record<string, boolean>>({
+    drive: false,
+    calendar: false,
+    gmail: false,
+  });
+  const [googleConnected, setGoogleConnected] = useState<Record<string, boolean>>({});
+
+  // Step 6: Enrichment questions
+  const [enrichmentAnswers, setEnrichmentAnswers] = useState<Record<string, string>>({});
 
   // Step 6: Agent config
   const [agentName, setAgentName] = useState("");
@@ -118,7 +191,11 @@ export default function OnboardingPage() {
     if (!userId || !agentName.trim()) return;
     setLoading(true);
     try {
-      await synthesizeProfile(userId, agentName.trim(), autonomyLevel);
+      // Filter out empty answers
+      const answers = Object.fromEntries(
+        Object.entries(enrichmentAnswers).filter(([, v]) => v.trim())
+      );
+      await synthesizeProfile(userId, agentName.trim(), autonomyLevel, Object.keys(answers).length > 0 ? answers : undefined);
       router.push("/dashboard");
     } catch (err) {
       alert(`Failed to create agent: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -142,11 +219,13 @@ export default function OnboardingPage() {
   const canGoNext = () => {
     switch (step) {
       case 0: return displayName.trim().length > 0;
-      case 1: return docs.idp.uploaded;
-      case 2: return docs.ethics.uploaded;
-      case 3: return docs.insights.uploaded;
-      case 4: return true;
-      case 5: return agentName.trim().length > 0;
+      case 1: return true; // Google connection is optional
+      case 2: return docs.idp.uploaded;
+      case 3: return docs.ethics.uploaded;
+      case 4: return docs.insights.uploaded;
+      case 5: return true;
+      case 6: return true; // enrichment is optional
+      case 7: return agentName.trim().length > 0;
       default: return false;
     }
   };
@@ -219,8 +298,84 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 1: Upload IDP */}
+        {/* Step 1: Connect Google */}
         {step === 1 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold">Connect Your Google Account</h2>
+              <p className="mt-1 text-muted-foreground">
+                Give your agent access to your Google services so it can understand your
+                work, schedule, and communications. This makes your digital twin
+                significantly smarter — but it&apos;s entirely your choice.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950">
+              <div className="flex items-start gap-3">
+                <Shield className="mt-0.5 h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div className="text-sm">
+                  <p className="font-medium text-blue-800 dark:text-blue-200">Your data, your rules</p>
+                  <p className="mt-1 text-blue-700 dark:text-blue-300">
+                    All access is <strong>read-only</strong>. Your agent never modifies, sends, or deletes anything.
+                    You can revoke access anytime from your profile settings. Data stays in your account —
+                    it&apos;s used to give your agent context, not stored or shared with other members.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {GOOGLE_SERVICES.map((service) => (
+                <div
+                  key={service.id}
+                  className={`rounded-lg border p-4 transition-colors ${
+                    googleServices[service.id]
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-muted-foreground/50"
+                  }`}
+                >
+                  <label className="flex cursor-pointer items-start gap-4">
+                    <input
+                      type="checkbox"
+                      checked={googleServices[service.id] || false}
+                      onChange={(e) =>
+                        setGoogleServices((prev) => ({
+                          ...prev,
+                          [service.id]: e.target.checked,
+                        }))
+                      }
+                      className="mt-1 h-4 w-4 rounded border-gray-300"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{service.icon}</span>
+                        <span className="font-medium">{service.name}</span>
+                        {googleConnected[service.id] && (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700 dark:bg-green-950 dark:text-green-300">
+                            Connected
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {service.description}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground/70">
+                        {service.detail}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground">
+              You can always connect or disconnect services later from your profile.
+            </p>
+          </div>
+        )}
+
+        {/* Step 2: Upload IDP */}
+        {step === 2 && (
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold">Individual Development Plan</h2>
@@ -256,8 +411,8 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 2: Upload Ethics Paper */}
-        {step === 2 && (
+        {/* Step 3: Upload Ethics Paper */}
+        {step === 3 && (
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold">Ethics / Worldview Paper</h2>
@@ -293,8 +448,8 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 3: Upload Insights Profile */}
-        {step === 3 && (
+        {/* Step 4: Upload Insights Profile */}
+        {step === 4 && (
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold">Insights Discovery Profile</h2>
@@ -330,8 +485,8 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 4: Review Synthesized Profile */}
-        {step === 4 && (
+        {/* Step 5: Review Synthesized Profile */}
+        {step === 5 && (
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold">Review Your Agent Profile</h2>
@@ -437,8 +592,38 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 5: Name Agent + Autonomy */}
-        {step === 5 && (
+        {/* Step 6: Enrichment Questions */}
+        {step === 6 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold">Tell Us More</h2>
+              <p className="mt-1 text-muted-foreground">
+                Your documents capture how you think and what you value. These questions
+                fill in what you&apos;re doing and where you&apos;re headed. All optional — answer
+                what feels right.
+              </p>
+            </div>
+            <div className="space-y-5">
+              {ENRICHMENT_QUESTIONS.map((q) => (
+                <div key={q.id}>
+                  <label className="text-sm font-medium">{q.question}</label>
+                  <textarea
+                    value={enrichmentAnswers[q.id] || ""}
+                    onChange={(e) =>
+                      setEnrichmentAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))
+                    }
+                    placeholder={q.placeholder}
+                    rows={2}
+                    className="mt-1 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 7: Name Agent + Autonomy */}
+        {step === 7 && (
           <div className="space-y-6">
             <div>
               <h2 className="text-2xl font-bold">Name Your Agent</h2>
@@ -504,14 +689,21 @@ export default function OnboardingPage() {
             </Button>
           )}
 
-          {step >= 1 && step < 3 && (
+          {step === 1 && (
+            <Button onClick={() => setStep(2)}>
+              {Object.values(googleServices).some(Boolean) ? "Connect & Continue" : "Skip for Now"}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          )}
+
+          {step >= 2 && step < 4 && (
             <Button onClick={() => setStep(step + 1)} disabled={!canGoNext() || loading}>
               Next
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <Button onClick={handleGoToReview} disabled={!canGoNext() || loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Review Profile
@@ -519,14 +711,21 @@ export default function OnboardingPage() {
             </Button>
           )}
 
-          {step === 4 && (
-            <Button onClick={() => setStep(5)}>
+          {step === 5 && (
+            <Button onClick={() => setStep(6)}>
               Continue
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
+            <Button onClick={() => setStep(7)}>
+              {Object.values(enrichmentAnswers).some((v) => v.trim()) ? "Continue" : "Skip"}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          )}
+
+          {step === 7 && (
             <Button onClick={handleFinish} disabled={!canGoNext() || loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create My Agent
