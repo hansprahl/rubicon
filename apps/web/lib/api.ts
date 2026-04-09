@@ -365,6 +365,59 @@ export function postToFeed(
   );
 }
 
+// --- Direct Messages ---
+
+export interface DMConversation {
+  id: string;
+  other_user_id: string;
+  other_user_name: string;
+  last_message: string | null;
+  last_message_at: string;
+  unread_count: number;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DMMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  sender_name: string;
+  content: string;
+  read_at: string | null;
+  created_at: string;
+}
+
+export function getDMConversations(userId: string) {
+  return request<DMConversation[]>(`/dm/conversations?user_id=${userId}`);
+}
+
+export function getOrCreateDM(userId: string, otherUserId: string) {
+  return request<{ id: string; participant_1: string; participant_2: string }>(
+    `/dm/conversations?user_id=${userId}&other_user_id=${otherUserId}`,
+    { method: "POST" }
+  );
+}
+
+export function getDMMessages(conversationId: string, limit = 50) {
+  return request<DMMessage[]>(`/dm/conversations/${conversationId}/messages?limit=${limit}`);
+}
+
+export function sendDM(conversationId: string, userId: string, content: string) {
+  return request<DMMessage>(
+    `/dm/conversations/${conversationId}/messages?user_id=${userId}`,
+    { method: "POST", body: JSON.stringify({ content }) }
+  );
+}
+
+export function markDMRead(conversationId: string, userId: string) {
+  return request<{ status: string }>(
+    `/dm/conversations/${conversationId}/read?user_id=${userId}`,
+    { method: "POST" }
+  );
+}
+
 // --- Knowledge Graph ---
 
 export interface GraphEntity {

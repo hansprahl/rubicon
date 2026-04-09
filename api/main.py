@@ -20,6 +20,7 @@ from api.routes.north_star import router as north_star_router
 from api.routes.workspaces import router as workspaces_router
 from api.routes.intelligence import router as intelligence_router
 from api.routes.admin import router as admin_router
+from api.routes.dm import router as dm_router
 from api.runtime.inter_agent import register_default_handlers
 from api.runtime.task_queue import run_task_queue
 
@@ -64,6 +65,7 @@ app.include_router(workspaces_router, prefix="/api")
 app.include_router(intelligence_router, prefix="/api")
 app.include_router(feedback_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(dm_router, prefix="/api")
 
 
 @app.get("/health")
