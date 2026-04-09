@@ -101,9 +101,9 @@ export function NavSidebar() {
           {userId && <NotificationBell userId={userId} />}
           <button
             onClick={() => setMobileOpen(false)}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent md:hidden"
+            className="rounded-md p-2 text-muted-foreground hover:bg-accent md:hidden"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
       </div>

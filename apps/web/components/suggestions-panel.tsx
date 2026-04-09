@@ -103,10 +103,10 @@ export function SuggestionsPanel({ userId }: { userId: string }) {
                 )}
                 <button
                   onClick={() => handleDismiss(s.id)}
-                  className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
                   title="Dismiss"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </div>

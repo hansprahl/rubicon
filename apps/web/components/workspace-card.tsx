@@ -42,7 +42,7 @@ export function WorkspaceCard({ workspace }: WorkspaceCardProps) {
       className="block rounded-lg border bg-card p-5 transition-colors hover:bg-accent"
     >
       <div className="flex items-start justify-between">
-        <h3 className="font-semibold">{workspace.name}</h3>
+        <h3 className="truncate font-semibold">{workspace.name}</h3>
         {roleBadge(workspace.role)}
       </div>
       {workspace.description && (

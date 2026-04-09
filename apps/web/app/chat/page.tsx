@@ -372,7 +372,7 @@ export default function ChatPage() {
                   {mobileChatsOpen && (
                     <>
                       <div className="fixed inset-0 z-10" onClick={() => setMobileChatsOpen(false)} />
-                      <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border bg-card shadow-lg">
+                      <div className="absolute left-0 top-full z-20 mt-1 w-[calc(100vw-5rem)] max-w-72 rounded-lg border bg-card shadow-lg">
                         <div className="flex items-center justify-between border-b px-3 py-2">
                           <span className="text-xs font-semibold text-muted-foreground">Conversations</span>
                           <button
@@ -625,7 +625,7 @@ export default function ChatPage() {
                 placeholder="Type a message... Use @ to mention"
                 disabled={sending}
                 maxLength={4000}
-                className="flex-1 rounded-md border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                className="flex-1 rounded-md border bg-background px-4 py-2 text-base outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 sm:text-sm"
               />
               <button
                 type="submit"

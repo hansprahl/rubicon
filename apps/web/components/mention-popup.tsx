@@ -165,7 +165,7 @@ export function MentionPopup({ query, onSelect, onClose, visible }: MentionPopup
   return (
     <div
       ref={popupRef}
-      className="absolute bottom-full left-0 mb-2 w-72 max-h-64 overflow-auto rounded-lg border bg-card shadow-lg"
+      className="absolute bottom-full left-0 mb-2 w-[calc(100vw-2rem)] max-h-64 overflow-auto rounded-lg border bg-card shadow-lg sm:w-72"
     >
       {loading ? (
         <div className="px-4 py-3 text-sm text-muted-foreground">Loading...</div>

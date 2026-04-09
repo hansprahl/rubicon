@@ -158,7 +158,7 @@ function FeedTab({
               }
             }}
             placeholder="Type a message..."
-            className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="flex-1 rounded-md border bg-background px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
           />
           <button
             onClick={handleSend}
@@ -226,10 +226,10 @@ function MilestoneRow({
 
   return (
     <div
-      className={`flex items-center gap-3 rounded-md border bg-card p-3 ${isOverdue ? "border-red-300" : ""}`}
+      className={`flex flex-col gap-3 rounded-md border bg-card p-3 sm:flex-row sm:items-center ${isOverdue ? "border-red-300" : ""}`}
     >
       <div className="flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{milestone.title}</span>
           <span
             className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${MILESTONE_STATUS_COLORS[milestone.status] || MILESTONE_STATUS_COLORS.pending}`}
@@ -348,14 +348,14 @@ function BoardTab({ workspaceId }: { workspaceId: string }) {
       </div>
 
       {boardView === "kanban" ? (
-        /* Kanban columns */
-        <div className="flex flex-1 gap-4 overflow-x-auto p-4">
+        /* Kanban columns — stacked on mobile, side-by-side on desktop */
+        <div className="flex flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:overflow-x-auto">
           {KANBAN_COLUMNS.map((col) => {
             const colTasks = tasks.filter((t) => t.status === col.key);
             return (
               <div
                 key={col.key}
-                className={`flex w-64 shrink-0 flex-col rounded-lg border border-t-2 bg-muted/30 ${col.accent}`}
+                className={`flex w-full shrink-0 flex-col rounded-lg border border-t-2 bg-muted/30 md:w-64 ${col.accent}`}
               >
                 <div className="flex items-center justify-between px-3 py-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

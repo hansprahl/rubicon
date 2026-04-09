@@ -96,7 +96,7 @@ export function NotificationBell({ userId }: { userId: string }) {
           {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           {/* Dropdown */}
-          <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border bg-card shadow-lg">
+          <div className="absolute right-0 top-full z-50 mt-1 w-[calc(100vw-2rem)] rounded-lg border bg-card shadow-lg sm:left-0 sm:right-auto sm:w-80">
             <div className="flex items-center justify-between border-b px-4 py-2">
               <span className="text-sm font-medium">Notifications</span>
               {unreadCount > 0 && (

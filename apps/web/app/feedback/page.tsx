@@ -108,8 +108,8 @@ function SubmitModal({ onClose, onSubmit, defaultPageUrl }: SubmitModalProps) {
       <div className="w-full max-w-[calc(100vw-2rem)] sm:max-w-md rounded-xl border bg-card p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold">Submit Feedback</h2>
-          <button onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-accent">
-            <X className="h-4 w-4" />
+          <button onClick={onClose} className="rounded p-2 text-muted-foreground hover:bg-accent">
+            <X className="h-5 w-5" />
           </button>
         </div>
 
@@ -142,7 +142,7 @@ function SubmitModal({ onClose, onSubmit, defaultPageUrl }: SubmitModalProps) {
           <div>
             <label className="mb-1.5 block text-sm font-medium">Title</label>
             <input
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border bg-background px-3 py-2 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
               placeholder="Short summary of the issue or idea"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -153,7 +153,7 @@ function SubmitModal({ onClose, onSubmit, defaultPageUrl }: SubmitModalProps) {
           <div>
             <label className="mb-1.5 block text-sm font-medium">Description</label>
             <textarea
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border bg-background px-3 py-2 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
               placeholder="Describe what happened, what you expected, or your idea in detail"
               rows={4}
               value={body}

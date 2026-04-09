@@ -105,10 +105,10 @@ export default function AdminUsersPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col gap-2 mb-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-            <p className="text-muted-foreground mt-1">
+            <h1 className="text-xl font-bold text-foreground sm:text-2xl">User Management</h1>
+            <p className="text-sm text-muted-foreground mt-1">
               {users.length} total users{pendingCount > 0 && ` \u2022 ${pendingCount} pending approval`}
             </p>
           </div>
@@ -121,7 +121,7 @@ export default function AdminUsersPage() {
         </div>
 
         {/* Filter tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex flex-wrap gap-2 mb-6">
           {(["all", "pending", "approved", "rejected"] as const).map((f) => (
             <button
               key={f}
@@ -142,8 +142,63 @@ export default function AdminUsersPage() {
           ))}
         </div>
 
-        {/* Users table */}
-        <div className="bg-card rounded-xl shadow-sm border overflow-hidden">
+        {/* Users — card layout on mobile, table on desktop */}
+        {/* Mobile cards */}
+        <div className="space-y-3 md:hidden">
+          {filteredUsers.map((u) => (
+            <div key={u.id} className="rounded-xl border bg-card p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                {u.avatar_url ? (
+                  <img src={u.avatar_url} alt="" className="w-10 h-10 rounded-full" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium">
+                    {u.display_name?.charAt(0) || "?"}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium text-foreground">{u.display_name}</span>
+                    {u.is_admin && (
+                      <span className="shrink-0 px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">Admin</span>
+                    )}
+                  </div>
+                  <div className="truncate text-sm text-muted-foreground">{u.email}</div>
+                </div>
+                {statusBadge(u.status)}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                {u.agent_name && <span>Agent: {u.agent_name}</span>}
+                {u.fidelity != null && <span>Fidelity: {Math.round(u.fidelity * 100)}%</span>}
+                <span>Joined {new Date(u.created_at).toLocaleDateString()}</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {u.status === "pending" && (
+                  <>
+                    <button onClick={() => handleApprove(u.id)} disabled={actionLoading === u.id} className="flex-1 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50">Approve</button>
+                    <button onClick={() => handleReject(u.id)} disabled={actionLoading === u.id} className="flex-1 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50">Reject</button>
+                  </>
+                )}
+                {u.status === "rejected" && (
+                  <button onClick={() => handleApprove(u.id)} disabled={actionLoading === u.id} className="flex-1 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50">Approve</button>
+                )}
+                {u.status === "approved" && u.id !== currentUserId && (
+                  <>
+                    <button onClick={() => handleToggleAdmin(u.id)} disabled={actionLoading === u.id} className="flex-1 px-3 py-2 bg-purple-500/20 text-purple-400 text-sm rounded-lg hover:bg-purple-500/30 disabled:opacity-50">{u.is_admin ? "Remove Admin" : "Make Admin"}</button>
+                    <button onClick={() => handleReject(u.id)} disabled={actionLoading === u.id} className="flex-1 px-3 py-2 bg-muted text-muted-foreground text-sm rounded-lg hover:bg-muted/80 disabled:opacity-50">Revoke</button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+          {filteredUsers.length === 0 && (
+            <div className="px-6 py-12 text-center text-muted-foreground">
+              No {filter !== "all" ? filter : ""} users found
+            </div>
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block bg-card rounded-xl shadow-sm border overflow-hidden">
           <div className="overflow-x-auto">
           <table className="w-full">
             <thead>

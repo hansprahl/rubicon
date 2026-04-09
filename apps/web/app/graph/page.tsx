@@ -113,14 +113,14 @@ function DetailPanel({
   };
 
   return (
-    <div className="absolute right-0 top-0 z-10 flex h-full w-80 flex-col border-l bg-card shadow-lg">
+    <div className="absolute inset-0 z-10 flex flex-col bg-card shadow-lg sm:inset-auto sm:right-0 sm:top-0 sm:h-full sm:w-80 sm:border-l">
       <div className="flex items-center justify-between border-b p-4">
         <h3 className="text-sm font-semibold">Entity Details</h3>
         <button
           onClick={onClose}
-          className="rounded p-1 text-muted-foreground hover:bg-accent"
+          className="rounded p-2 text-muted-foreground hover:bg-accent"
         >
-          <X className="h-4 w-4" />
+          <X className="h-5 w-5" />
         </button>
       </div>
       <div className="flex-1 space-y-4 overflow-auto p-4">
@@ -548,14 +548,14 @@ export default function GraphExplorerPage() {
           </div>
 
           {/* Search */}
-          <div className="relative ml-auto">
+          <div className="relative w-full sm:ml-auto sm:w-auto">
             <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search entities..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="rounded-md border bg-background py-1 pl-7 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              className="w-full rounded-md border bg-background py-1.5 pl-7 pr-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring sm:w-auto sm:py-1 sm:text-xs"
             />
           </div>
         </div>
@@ -572,7 +572,7 @@ export default function GraphExplorerPage() {
             </div>
           ) : (
             <ForceGraph2D
-              width={dimensions.width - (selectedEntity ? 320 : 0)}
+              width={dimensions.width - (selectedEntity && dimensions.width >= 640 ? 320 : 0)}
               height={dimensions.height}
               graphData={graphData}
               nodeCanvasObject={paintNode as never}
