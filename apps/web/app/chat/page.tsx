@@ -5,6 +5,7 @@ import { Send, Loader2 } from "lucide-react";
 import { NavSidebar } from "@/components/nav-sidebar";
 import { ConfidenceBadge } from "@/components/confidence-badge";
 import { AgentStatus } from "@/components/agent-status";
+import { MentionPopup } from "@/components/mention-popup";
 import { sendMessage, getMessages, getAgentByUser, getAgent } from "@/lib/api";
 import type { ChatMessage as ChatMsg, AgentProfile } from "@/lib/api";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
@@ -18,7 +19,11 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionStart, setMentionStart] = useState(-1);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const loadMessages = useCallback(async () => {
     if (!agent) return;
@@ -214,13 +219,63 @@ export default function ChatPage() {
         {agent && (
           <form
             onSubmit={handleSend}
-            className="flex items-center gap-3 border-t px-4 py-4 sm:px-6"
+            className="relative flex items-center gap-3 border-t px-4 py-4 sm:px-6"
           >
+            <MentionPopup
+              query={mentionQuery}
+              visible={mentionOpen}
+              onClose={() => setMentionOpen(false)}
+              onSelect={(item) => {
+                // Replace @query with the selected mention
+                const before = input.slice(0, mentionStart);
+                const after = input.slice(mentionStart + mentionQuery.length + 1); // +1 for @
+                setInput(before + item.insertText + " " + after.trimStart());
+                setMentionOpen(false);
+                setMentionQuery("");
+                setMentionStart(-1);
+                inputRef.current?.focus();
+              }}
+            />
             <input
+              ref={inputRef}
               type="text"
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type a message..."
+              onChange={(e) => {
+                const val = e.target.value;
+                setInput(val);
+
+                // Detect @ trigger
+                const cursor = e.target.selectionStart || val.length;
+                const textBeforeCursor = val.slice(0, cursor);
+                const atIndex = textBeforeCursor.lastIndexOf("@");
+
+                if (atIndex >= 0) {
+                  const charBefore = atIndex > 0 ? textBeforeCursor[atIndex - 1] : " ";
+                  const queryAfterAt = textBeforeCursor.slice(atIndex + 1);
+                  // Open mention if @ is at start or after a space, and no space in query yet
+                  if ((charBefore === " " || atIndex === 0) && !queryAfterAt.includes(" ")) {
+                    setMentionOpen(true);
+                    setMentionQuery(queryAfterAt);
+                    setMentionStart(atIndex);
+                    return;
+                  }
+                }
+                setMentionOpen(false);
+              }}
+              onKeyDown={(e) => {
+                // Let mention popup handle arrow keys and enter when open
+                if (mentionOpen && ["ArrowDown", "ArrowUp", "Tab"].includes(e.key)) {
+                  e.preventDefault();
+                }
+                if (mentionOpen && e.key === "Enter") {
+                  e.preventDefault();
+                }
+                if (mentionOpen && e.key === "Escape") {
+                  e.preventDefault();
+                  setMentionOpen(false);
+                }
+              }}
+              placeholder="Type a message... Use @ to mention"
               disabled={sending}
               maxLength={4000}
               className="flex-1 rounded-md border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
