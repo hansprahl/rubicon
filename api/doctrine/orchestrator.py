@@ -64,6 +64,16 @@ async def submit_for_approval(
     sb.table("agent_profiles").update({"status": "waiting_approval"}).eq(
         "id", str(agent_id)
     ).execute()
+
+    # Send in-app notification
+    from api.runtime.task_queue import notify_approval_needed
+
+    agent_result = sb.table("agent_profiles").select("agent_name").eq(
+        "id", str(agent_id)
+    ).execute()
+    agent_name = agent_result.data[0]["agent_name"] if agent_result.data else "Your agent"
+    notify_approval_needed(str(user_id), action_type, agent_name)
+
     return result.data[0] if result.data else {}
 
 

@@ -476,7 +476,7 @@ export default function GraphExplorerPage() {
       <NavSidebar />
       <main className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex h-14 items-center gap-4 border-b px-6">
+        <header className="flex h-14 items-center gap-4 border-b px-6 max-md:pl-14">
           <h1 className="text-lg font-semibold">Knowledge Graph</h1>
           <span className="text-xs text-muted-foreground">
             {filteredEntities.length} entities, {filteredRelationships.length}{" "}
@@ -485,7 +485,7 @@ export default function GraphExplorerPage() {
         </header>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 border-b px-6 py-2">
+        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 sm:gap-3 sm:px-6">
           <Filter className="h-4 w-4 text-muted-foreground" />
 
           {/* Workspace */}
@@ -600,7 +600,7 @@ export default function GraphExplorerPage() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-4 border-t px-6 py-2 text-[10px]">
+        <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2 text-[10px] sm:gap-4 sm:px-6">
           <span className="text-muted-foreground">Edges:</span>
           <span className="flex items-center gap-1">
             <span className="inline-block h-0.5 w-4 bg-green-500" /> SUPPORTS

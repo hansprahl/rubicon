@@ -497,6 +497,61 @@ export function updateTask(
   });
 }
 
+// --- Notifications ---
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string | null;
+  category: "approval" | "disagreement" | "milestone" | "agent" | "workspace" | "info";
+  link: string | null;
+  read: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export function getNotifications(userId: string, unreadOnly = false, limit = 50) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (unreadOnly) params.set("unread_only", "true");
+  return request<Notification[]>(`/notifications/user/${userId}?${params}`);
+}
+
+export function getUnreadNotificationCount(userId: string) {
+  return request<{ count: number }>(`/notifications/user/${userId}/count`);
+}
+
+export function markNotificationRead(notificationId: string) {
+  return request<Notification>(`/notifications/${notificationId}/read`, {
+    method: "POST",
+  });
+}
+
+export function markAllNotificationsRead(userId: string) {
+  return request<{ status: string }>(`/notifications/user/${userId}/read-all`, {
+    method: "POST",
+  });
+}
+
+// --- Agent Profile Update ---
+
+export function updateAgent(
+  agentId: string,
+  data: {
+    agent_name?: string;
+    expertise?: string[];
+    goals?: string[];
+    values?: string[];
+    communication_style?: string;
+    autonomy_level?: number;
+  }
+) {
+  return request<AgentProfile>(`/agents/${agentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 // --- Onboarding ---
 
 export function synthesizeProfile(

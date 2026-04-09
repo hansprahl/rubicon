@@ -61,7 +61,7 @@ export default function WorkspacesPage() {
     <div className="flex h-screen">
       <NavSidebar />
       <main className="flex-1 overflow-auto">
-        <header className="flex h-14 items-center justify-between border-b px-6">
+        <header className="flex h-14 items-center justify-between border-b px-6 max-md:pl-14">
           <h1 className="text-lg font-semibold">Workspaces</h1>
           <button
             onClick={() => setShowCreate(!showCreate)}

@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,19 +10,29 @@ from api.routes.approvals import router as approvals_router
 from api.routes.events import router as events_router
 from api.routes.graph import router as graph_router
 from api.routes.milestones import router as milestones_router
+from api.routes.notifications import router as notifications_router
 from api.routes.onboarding import router as onboarding_router
 from api.routes.workspaces import router as workspaces_router
 from api.runtime.inter_agent import register_default_handlers
+from api.runtime.task_queue import run_task_queue
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Register inter-agent event handlers on startup
     register_default_handlers()
+    # Start background task queue worker
+    task_queue_task = asyncio.create_task(run_task_queue())
     yield
+    # Shutdown: cancel the task queue
+    task_queue_task.cancel()
+    try:
+        await task_queue_task
+    except asyncio.CancelledError:
+        pass
 
 
-app = FastAPI(title="Rubicon API", version="0.7.0", lifespan=lifespan)
+app = FastAPI(title="Rubicon API", version="0.8.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,10 +47,11 @@ app.include_router(approvals_router, prefix="/api")
 app.include_router(events_router, prefix="/api")
 app.include_router(graph_router, prefix="/api")
 app.include_router(milestones_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 app.include_router(onboarding_router, prefix="/api")
 app.include_router(workspaces_router, prefix="/api")
 
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "version": "0.7.0"}
+    return {"status": "ok", "version": "0.8.0"}

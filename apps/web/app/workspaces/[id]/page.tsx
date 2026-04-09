@@ -28,6 +28,7 @@ import type {
   Milestone,
 } from "@/lib/api";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import { useRealtimeFeed, useRealtimeTasks, useRealtimeEntities } from "@/lib/realtime";
 
 type Tab = "feed" | "board" | "graph";
 
@@ -79,6 +80,9 @@ function FeedTab({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live feed updates
+  useRealtimeFeed(workspaceId, load);
 
   async function handleSend() {
     if (!input.trim()) return;
@@ -296,6 +300,9 @@ function BoardTab({ workspaceId }: { workspaceId: string }) {
     load();
   }, [load]);
 
+  // Live task updates
+  useRealtimeTasks(workspaceId, load);
+
   async function handleMilestoneStatusChange(id: string, status: string) {
     try {
       await updateMilestone(id, { status });
@@ -404,6 +411,24 @@ function GraphTab({ workspaceId }: { workspaceId: string }) {
   const [entities, setEntities] = useState<GraphEntity[]>([]);
   const [relationships, setRelationships] = useState<GraphRelationship[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const loadGraph = useCallback(async () => {
+    try {
+      const [ents, rels] = await Promise.all([
+        getEntities(workspaceId),
+        getRelationships(workspaceId),
+      ]);
+      setEntities(ents);
+      setRelationships(rels);
+    } catch {
+      // failed
+    } finally {
+      setLoading(false);
+    }
+  }, [workspaceId]);
+
+  // Live entity updates
+  useRealtimeEntities(workspaceId, loadGraph);
 
   useEffect(() => {
     async function load() {
@@ -600,7 +625,7 @@ export default function WorkspaceDetailPage() {
       <NavSidebar />
       <main className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex h-14 items-center gap-3 border-b px-6">
+        <header className="flex h-14 items-center gap-3 border-b px-6 max-md:pl-14">
           <Link
             href="/workspaces"
             className="text-muted-foreground hover:text-foreground"

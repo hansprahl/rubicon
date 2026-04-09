@@ -11,9 +11,13 @@ import {
   GitFork,
   User,
   LogOut,
+  Menu,
+  X,
 } from "lucide-react";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { getApprovalCount } from "@/lib/api";
+import { useRealtimeApprovals } from "@/lib/realtime";
+import { NotificationBell } from "@/components/notification-bell";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -28,6 +32,8 @@ const navItems = [
 export function NavSidebar() {
   const pathname = usePathname();
   const [pendingCount, setPendingCount] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const refreshCount = useCallback(async (uid: string) => {
     try {
@@ -39,44 +45,27 @@ export function NavSidebar() {
   }, []);
 
   useEffect(() => {
-    const supabase = createBrowserSupabaseClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-
     async function init() {
+      const supabase = createBrowserSupabaseClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-
+      setUserId(user.id);
       refreshCount(user.id);
-
-      // Subscribe to realtime changes on the approvals table for this user
-      channel = supabase
-        .channel("nav-approval-count")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "approvals",
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => {
-            refreshCount(user.id);
-          }
-        )
-        .subscribe();
     }
-
     init();
-
-    return () => {
-      if (channel) {
-        const supabase = createBrowserSupabaseClient();
-        supabase.removeChannel(channel);
-      }
-    };
   }, [refreshCount]);
+
+  // Live approval count via Supabase Realtime
+  useRealtimeApprovals(userId, () => {
+    if (userId) refreshCount(userId);
+  });
+
+  // Close mobile nav on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   async function handleSignOut() {
     const supabase = createBrowserSupabaseClient();
@@ -84,12 +73,21 @@ export function NavSidebar() {
     window.location.href = "/login";
   }
 
-  return (
-    <aside className="flex h-screen w-60 flex-col border-r bg-card">
-      <div className="flex h-14 items-center border-b px-4">
+  const sidebarContent = (
+    <>
+      <div className="flex h-14 items-center justify-between border-b px-4">
         <Link href="/dashboard" className="text-lg font-bold">
           Rubicon
         </Link>
+        <div className="flex items-center gap-1">
+          {userId && <NotificationBell userId={userId} />}
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent md:hidden"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       <nav className="flex-1 space-y-1 p-3">
         {navItems.map((item) => {
@@ -128,6 +126,37 @@ export function NavSidebar() {
           Sign Out
         </button>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile hamburger */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="fixed left-3 top-3 z-40 rounded-md border bg-card p-2 shadow-sm md:hidden"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — desktop always visible, mobile slides in */}
+      <aside
+        className={cn(
+          "flex h-screen w-60 shrink-0 flex-col border-r bg-card",
+          "max-md:fixed max-md:left-0 max-md:top-0 max-md:z-50 max-md:transition-transform max-md:duration-200",
+          mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
+        )}
+      >
+        {sidebarContent}
+      </aside>
+    </>
   );
 }
