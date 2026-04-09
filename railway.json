@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "nixpacksPlan": {
+      "providers": ["python"],
+      "phases": {
+        "install": {
+          "cmds": ["pip install -r api/requirements.txt"]
+        }
+      },
+      "start": "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+    }
+  }
+}
