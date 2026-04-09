@@ -131,6 +131,17 @@ AGENT_TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "invite_all_users_to_workspace",
+        "description": "Invite all approved platform users to a workspace. Only the workspace owner can do this.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "workspace_id": {"type": "string"},
+            },
+            "required": ["workspace_id"],
+        },
+    },
 ]
 
 
@@ -457,6 +468,54 @@ async def _list_my_workspaces(tool_input: dict, agent_id: str, user_id: str) -> 
     return json.dumps(result)
 
 
+async def _invite_all_users_to_workspace(tool_input: dict, agent_id: str, user_id: str) -> str:
+    sb = _sb()
+    workspace_id = tool_input["workspace_id"]
+
+    # Verify the user is the workspace owner
+    membership = (
+        sb.table("workspace_members")
+        .select("role")
+        .eq("workspace_id", workspace_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not membership.data or membership.data[0]["role"] != "owner":
+        return json.dumps({"error": "Only workspace owners can bulk-invite users."})
+
+    # Get all approved users
+    users = sb.table("users").select("id").eq("status", "approved").execute()
+
+    # Get existing members
+    existing = (
+        sb.table("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspace_id)
+        .execute()
+    )
+    existing_ids = {m["user_id"] for m in (existing.data or [])}
+
+    invited = 0
+    for u in (users.data or []):
+        if u["id"] not in existing_ids:
+            try:
+                sb.table("workspace_members").insert({
+                    "workspace_id": workspace_id,
+                    "user_id": u["id"],
+                    "role": "member",
+                }).execute()
+                invited += 1
+            except Exception:
+                pass  # Skip duplicates or constraint errors
+
+    return json.dumps({
+        "status": "done",
+        "invited": invited,
+        "already_members": len(existing_ids),
+        "message": f"Invited {invited} new users to the workspace.",
+    })
+
+
 # -- Handler dispatch map --
 
 _HANDLERS = {
@@ -469,4 +528,5 @@ _HANDLERS = {
     "list_workspace_members": _list_workspace_members,
     "create_task": _create_task,
     "list_my_workspaces": _list_my_workspaces,
+    "invite_all_users_to_workspace": _invite_all_users_to_workspace,
 }
