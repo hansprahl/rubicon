@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
 
   // Check approval status via API
   // Admin pages are only for admins (checked server-side too, but redirect here for UX)
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
   try {
     const statusRes = await fetch(`${apiBase}/admin/users/${user.id}/check`, {
       headers: { "Content-Type": "application/json" },

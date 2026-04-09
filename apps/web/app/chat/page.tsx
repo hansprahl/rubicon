@@ -100,6 +100,8 @@ export default function ChatPage() {
       const response = await sendMessage(agent.id, userContent);
       setMessages((prev) => [...prev, response]);
     } catch (err) {
+      // Remove the optimistic message on failure
+      setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
       setError(err instanceof Error ? err.message : "Failed to send message");
     } finally {
       setSending(false);
