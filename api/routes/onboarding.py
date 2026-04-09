@@ -172,7 +172,18 @@ async def upload_document(
 
     sb = _supabase()
     file_content = await file.read()
+
+    # Limit file size to 10MB
+    max_size = 10 * 1024 * 1024
+    if len(file_content) > max_size:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 10MB.")
+
     filename = file.filename or f"{doc_type}_document"
+
+    # Validate file extension
+    lower = (filename or "").lower()
+    if not lower.endswith((".pdf", ".docx", ".txt")):
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, and TXT files are supported.")
 
     # Upload to Supabase Storage
     storage_path = f"onboarding/{user_id}/{doc_type}/{filename}"

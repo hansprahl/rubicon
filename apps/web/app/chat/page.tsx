@@ -16,6 +16,7 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [agent, setAgent] = useState<AgentProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -50,10 +51,16 @@ export default function ChatPage() {
 
         const profile = await getAgentByUser(user.id);
         setAgent(profile);
+        setLoadError(false);
         const history = await getMessages(profile.id);
         setMessages(history);
-      } catch {
-        // Agent may not exist yet
+      } catch (err) {
+        // Distinguish "no agent" (404-like) from actual failures
+        if (err instanceof Error && err.message.includes("not found")) {
+          setLoadError(false);
+        } else {
+          setLoadError(true);
+        }
       } finally {
         setLoading(false);
       }
@@ -120,6 +127,35 @@ export default function ChatPage() {
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Loading...
+            </div>
+          ) : loadError ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
+              <p>Failed to load agent. Please try again.</p>
+              <button
+                onClick={() => {
+                  setLoading(true);
+                  setLoadError(false);
+                  (async () => {
+                    try {
+                      const supabase = createBrowserSupabaseClient();
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) return;
+                      const profile = await getAgentByUser(user.id);
+                      setAgent(profile);
+                      setLoadError(false);
+                      const history = await getMessages(profile.id);
+                      setMessages(history);
+                    } catch {
+                      setLoadError(true);
+                    } finally {
+                      setLoading(false);
+                    }
+                  })();
+                }}
+                className="rounded-md border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Retry
+              </button>
             </div>
           ) : !agent ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">

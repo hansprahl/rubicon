@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const [recentActivity, setRecentActivity] = useState<Notification[]>([]);
   const [anatomy, setAnatomy] = useState<AgentAnatomy | null>(null);
   const [loading, setLoading] = useState(true);
+  const [apiUnreachable, setApiUnreachable] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
   const load = useCallback(async (uid: string) => {
@@ -35,18 +36,21 @@ export default function DashboardPage() {
       // Ensure template agent exists (idempotent)
       await ensureAgent(uid).catch(() => {});
 
+      const sentinel = Symbol("fail");
       const [profile, { count }, ws, notifs, anatomyData] = await Promise.all([
-        getAgentByUser(uid).catch(() => null),
-        getApprovalCount(uid),
-        getWorkspaces(uid).catch(() => [] as WorkspaceWithMembers[]),
-        getNotifications(uid, false, 10).catch(() => [] as Notification[]),
-        getAnatomy(uid).catch(() => null),
+        getAgentByUser(uid).catch(() => sentinel),
+        getApprovalCount(uid).catch(() => ({ count: 0 })),
+        getWorkspaces(uid).catch(() => sentinel),
+        getNotifications(uid, false, 10).catch(() => sentinel),
+        getAnatomy(uid).catch(() => sentinel),
       ]);
-      setAgent(profile);
+      const allFailed = [profile, ws, notifs, anatomyData].every((v) => v === sentinel);
+      setApiUnreachable(allFailed);
+      setAgent(profile === sentinel ? null : profile);
       setPendingCount(count);
-      setWorkspaces(ws);
-      setRecentActivity(notifs);
-      setAnatomy(anatomyData);
+      setWorkspaces(ws === sentinel ? [] : ws);
+      setRecentActivity(notifs === sentinel ? [] : notifs);
+      setAnatomy(anatomyData === sentinel ? null : anatomyData);
     } catch {
       // failed to load
     } finally {
@@ -104,6 +108,13 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="p-4 sm:p-6">
+            {/* API Error Banner */}
+            {apiUnreachable && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+                Unable to connect to Rubicon API. Some features may be unavailable.
+              </div>
+            )}
+
             {/* Fidelity Banner */}
             {agent && agent.fidelity != null && agent.fidelity < 0.7 && (
               <Link

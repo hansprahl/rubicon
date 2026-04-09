@@ -391,7 +391,7 @@ export default function FeedbackPage() {
               <MessageSquarePlus className="mb-3 h-8 w-8 text-muted-foreground/50" />
               <p className="text-sm font-medium">No feedback yet</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Be the first to submit a bug report or feature request.
+                Be the first to submit feedback, a bug report, or feature request.
               </p>
               <button
                 onClick={() => setShowModal(true)}

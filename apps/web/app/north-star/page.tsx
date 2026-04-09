@@ -102,6 +102,7 @@ export default function NorthStarPage() {
       setMode("view");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Synthesis failed");
+      // Keep mode="build" so the user can retry (do not switch to "view")
     } finally {
       setSynthesizing(false);
     }

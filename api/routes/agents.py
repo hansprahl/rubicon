@@ -41,7 +41,12 @@ async def ensure_agent(user_id: UUID):
         return {"status": "exists", "agent_id": existing.data[0]["id"]}
 
     # Get user info from Supabase Auth
-    auth_user = sb.auth.admin.get_user_by_id(str(user_id))
+    try:
+        auth_user = sb.auth.admin.get_user_by_id(str(user_id))
+    except Exception:
+        raise HTTPException(status_code=404, detail="Auth user not found")
+    if not auth_user or not auth_user.user:
+        raise HTTPException(status_code=404, detail="Auth user not found")
     email = auth_user.user.email or ""
     meta = auth_user.user.user_metadata or {}
     display_name = meta.get("full_name") or meta.get("name") or email.split("@")[0]
@@ -72,22 +77,29 @@ async def ensure_agent(user_id: UUID):
         except Exception:
             pass  # Notification is nice-to-have
 
-    # Create template agent
+    # Create template agent (handle race condition — unique constraint on user_id)
     agent_name = f"{display_name}'s Agent"
     system_prompt = get_template_prompt(display_name, agent_name)
 
-    result = sb.table("agent_profiles").insert({
-        "user_id": str(user_id),
-        "agent_name": agent_name,
-        "expertise": [],
-        "goals": [],
-        "values": [],
-        "personality": {},
-        "communication_style": None,
-        "system_prompt": system_prompt,
-        "autonomy_level": 2,
-        "fidelity": 0.2,
-    }).execute()
+    try:
+        result = sb.table("agent_profiles").insert({
+            "user_id": str(user_id),
+            "agent_name": agent_name,
+            "expertise": [],
+            "goals": [],
+            "values": [],
+            "personality": {},
+            "communication_style": None,
+            "system_prompt": system_prompt,
+            "autonomy_level": 2,
+            "fidelity": 0.2,
+        }).execute()
+    except Exception:
+        # Race condition: another request already created the agent
+        existing = sb.table("agent_profiles").select("id").eq("user_id", str(user_id)).execute()
+        if existing.data:
+            return {"status": "exists", "agent_id": existing.data[0]["id"]}
+        return {"status": "error", "detail": "Failed to create template agent"}
 
     if not result.data:
         return {"status": "error", "detail": "Failed to create template agent"}
@@ -161,6 +173,11 @@ async def chat_with_agent(agent_id: UUID, body: ChatMessage):
     if not agent_result.data:
         raise HTTPException(status_code=404, detail="Agent not found")
     agent = agent_result.data[0]
+
+    # Check user is approved
+    user_result = sb.table("users").select("status").eq("id", agent["user_id"]).execute()
+    if user_result.data and user_result.data[0].get("status") != "approved":
+        raise HTTPException(status_code=403, detail="Account pending approval")
 
     # Mark agent as thinking
     sb.table("agent_profiles").update({"status": "thinking"}).eq(

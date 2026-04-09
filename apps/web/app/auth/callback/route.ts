@@ -26,7 +26,11 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const { data } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error) {
+      return NextResponse.redirect(new URL("/login?error=auth_failed", request.url));
+    }
 
     // Create template agent on first login
     if (data?.user) {

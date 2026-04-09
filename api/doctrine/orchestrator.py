@@ -38,7 +38,7 @@ AUTONOMY_THRESHOLDS: dict[str, int] = {
 
 def requires_approval(action_type: str, autonomy_level: int) -> bool:
     """Check whether an action requires human approval at the given autonomy level."""
-    threshold = AUTONOMY_THRESHOLDS.get(action_type, 2)
+    threshold = AUTONOMY_THRESHOLDS.get(action_type, 5)  # Unknown actions require max autonomy
     return autonomy_level < threshold
 
 
