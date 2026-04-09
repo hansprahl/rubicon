@@ -18,11 +18,11 @@ def _supabase():
 
 async def get_current_user(
     authorization: str | None = Header(None),
-    user_id: str | None = Query(None, alias="admin_id"),
+    admin_id: str | None = Query(None),
 ) -> str:
     """Extract authenticated user_id from Supabase JWT or fallback to query param.
 
-    Priority: Authorization header > admin_id query param > user_id query param.
+    Priority: Authorization header > admin_id query param.
     The query param fallback exists because the frontend currently passes user IDs
     as query params. This should be migrated to JWT-only auth.
     """
@@ -37,9 +37,9 @@ async def get_current_user(
             pass
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    # Fallback: accept user_id from query param (transition period)
-    if user_id:
-        return user_id
+    # Fallback: accept admin_id from query param (transition period)
+    if admin_id:
+        return admin_id
 
     raise HTTPException(status_code=401, detail="Authentication required")
 
