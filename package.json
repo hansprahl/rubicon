@@ -1,0 +1,12 @@
+{
+  "name": "rubicon",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev:web",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:api": "cd api && uvicorn api.main:app --reload --port 8000",
+    "build": "cd apps/web && npm run build",
+    "lint": "cd apps/web && npm run lint"
+  }
+}
