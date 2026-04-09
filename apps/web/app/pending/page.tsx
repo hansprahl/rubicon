@@ -41,9 +41,9 @@ export default function PendingPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
       <div className="max-w-md w-full mx-4">
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-8 text-center">
           {status === "rejected" ? (
             <>
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -51,8 +51,8 @@ export default function PendingPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-              <p className="text-gray-600 mb-6">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h1>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
                 Your request to join Rubicon has been declined. If you believe this is an error, please contact the platform administrator.
               </p>
             </>
@@ -63,11 +63,11 @@ export default function PendingPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">Pending Approval</h1>
-              <p className="text-gray-600 mb-2">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Pending Approval</h1>
+              <p className="text-gray-600 dark:text-gray-400 mb-2">
                 Your account <span className="font-medium">{email}</span> is waiting for admin approval.
               </p>
-              <p className="text-sm text-gray-500 mb-6">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
                 Rubicon is a private platform for EMBA Cohort 84. The administrator will review your request shortly. This page will automatically redirect once you&apos;re approved.
               </p>
               <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
@@ -79,7 +79,7 @@ export default function PendingPage() {
 
           <button
             onClick={handleSignOut}
-            className="mt-6 text-sm text-gray-500 hover:text-gray-700 underline"
+            className="mt-6 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 underline"
           >
             Sign out
           </button>

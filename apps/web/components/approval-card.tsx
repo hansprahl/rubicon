@@ -98,7 +98,7 @@ export function ApprovalCard({
               />
             )}
           </div>
-          <h3 className="mt-2 font-medium">{String(summary)}</h3>
+          <h3 className="mt-2 font-medium truncate">{String(summary)}</h3>
           {approval.agent_name && (
             <p className="mt-1 text-xs text-muted-foreground">
               Proposed by {approval.agent_name}

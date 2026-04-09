@@ -220,6 +220,7 @@ export default function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message..."
               disabled={sending}
+              maxLength={4000}
               className="flex-1 rounded-md border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
             />
             <button

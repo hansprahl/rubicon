@@ -81,7 +81,7 @@ export function NotificationBell({ userId }: { userId: string }) {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="relative rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="relative rounded-md p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
@@ -96,7 +96,7 @@ export function NotificationBell({ userId }: { userId: string }) {
           {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           {/* Dropdown */}
-          <div className="absolute right-0 top-full z-50 mt-1 w-80 rounded-lg border bg-card shadow-lg">
+          <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border bg-card shadow-lg">
             <div className="flex items-center justify-between border-b px-4 py-2">
               <span className="text-sm font-medium">Notifications</span>
               {unreadCount > 0 && (

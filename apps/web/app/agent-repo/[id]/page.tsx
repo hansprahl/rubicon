@@ -353,7 +353,7 @@ export default function AgentDetailPage() {
                       <button
                         key={val}
                         onClick={() => setRatingValue(val)}
-                        className="p-0.5"
+                        className="p-1.5"
                       >
                         <Star
                           className={cn(

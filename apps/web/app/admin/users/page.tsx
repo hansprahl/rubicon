@@ -144,6 +144,7 @@ export default function AdminUsersPage() {
 
         {/* Users table */}
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b">
@@ -260,6 +261,7 @@ export default function AdminUsersPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>

@@ -105,7 +105,7 @@ function SubmitModal({ onClose, onSubmit, defaultPageUrl }: SubmitModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
+      <div className="w-full max-w-[calc(100vw-2rem)] sm:max-w-md rounded-xl border bg-card p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold">Submit Feedback</h2>
           <button onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-accent">
