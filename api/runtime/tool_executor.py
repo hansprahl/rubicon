@@ -122,6 +122,15 @@ AGENT_TOOLS = [
             "required": ["title"],
         },
     },
+    {
+        "name": "list_my_workspaces",
+        "description": "List all workspaces you belong to, with their IDs and names. Use this to find workspace IDs before using other workspace tools.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
 ]
 
 
@@ -414,6 +423,40 @@ async def _create_task(tool_input: dict, agent_id: str, user_id: str) -> str:
     return json.dumps({"error": "Failed to create task"})
 
 
+async def _list_my_workspaces(tool_input: dict, agent_id: str, user_id: str) -> str:
+    sb = _sb()
+    # Get workspaces the user is a member of
+    memberships = (
+        sb.table("workspace_members")
+        .select("workspace_id,role")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not memberships.data:
+        return json.dumps([])
+
+    workspace_ids = [m["workspace_id"] for m in memberships.data]
+    role_map = {m["workspace_id"]: m["role"] for m in memberships.data}
+
+    workspaces = (
+        sb.table("workspaces")
+        .select("id,name,description,created_at")
+        .in_("id", workspace_ids)
+        .execute()
+    )
+
+    result = []
+    for ws in (workspaces.data or []):
+        result.append({
+            "workspace_id": ws["id"],
+            "name": ws["name"],
+            "description": ws.get("description"),
+            "role": role_map.get(ws["id"]),
+            "created_at": ws["created_at"],
+        })
+    return json.dumps(result)
+
+
 # -- Handler dispatch map --
 
 _HANDLERS = {
@@ -425,4 +468,5 @@ _HANDLERS = {
     "get_my_profile": _get_my_profile,
     "list_workspace_members": _list_workspace_members,
     "create_task": _create_task,
+    "list_my_workspaces": _list_my_workspaces,
 }
