@@ -62,13 +62,18 @@ Run `supabase/migrations/001_initial_schema.sql` against your Supabase project v
 - `api/doctrine/orchestrator.py` — Doctrine-powered agent orchestrator
 - `api/doctrine/confidence.py` — Confidence scoring for agent outputs
 - `api/doctrine/store.py` — Shared knowledge graph operations (entities, relationships, confidence)
+- `api/doctrine/events.py` — Event bus with publish/subscribe pattern (persisted to agent_events)
+- `api/runtime/inter_agent.py` — Agent-to-agent messaging, entity evaluation, disagreement detection
+- `api/routes/events.py` — Event history, subscriptions, and disagreement API endpoints
 - `api/models/agent.py` — Pydantic models for agents and chat
 - `api/models/onboarding.py` — Pydantic models for onboarding and parsed docs
 - `api/models/workspace.py` — Pydantic models for workspaces, feed, entities, relationships
+- `api/models/event.py` — Pydantic models for events, subscriptions, disagreements
 - `supabase/migrations/001_initial_schema.sql` — Full Postgres schema
+- `supabase/migrations/003_event_subscriptions.sql` — Event subscriptions table + indexes
 
 ## Environment Variables
 See `.env.example` for all required vars. The frontend needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ## Build Phases
-See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phases 1-5 are complete.
+See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phases 1-6 are complete.
