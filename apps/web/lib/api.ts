@@ -265,6 +265,18 @@ export interface FeedMessage {
   agent_name: string | null;
 }
 
+export interface DirectoryUser {
+  id: string;
+  display_name: string;
+  email: string;
+  avatar_url: string | null;
+  agent_name: string | null;
+}
+
+export function getDirectoryUsers() {
+  return request<DirectoryUser[]>("/workspaces/directory/users");
+}
+
 export function getWorkspaces(userId: string) {
   return request<WorkspaceWithMembers[]>(`/workspaces/user/${userId}`);
 }

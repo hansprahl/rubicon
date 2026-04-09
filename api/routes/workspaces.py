@@ -27,6 +27,38 @@ def _supabase():
 
 
 # ---------------------------------------------------------------------------
+# User directory (for mentions / collaboration)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/directory/users")
+async def list_approved_users():
+    """List all approved users with their agent info. Used for @ mentions."""
+    sb = _supabase()
+    users = (
+        sb.table("users")
+        .select("id, display_name, email, avatar_url")
+        .eq("status", "approved")
+        .order("display_name")
+        .execute()
+    )
+    # Also get agent names
+    agents = sb.table("agent_profiles").select("user_id, agent_name").execute()
+    agent_map = {a["user_id"]: a["agent_name"] for a in (agents.data or [])}
+
+    result = []
+    for u in users.data or []:
+        result.append({
+            "id": u["id"],
+            "display_name": u["display_name"],
+            "email": u["email"],
+            "avatar_url": u.get("avatar_url"),
+            "agent_name": agent_map.get(u["id"]),
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Workspace CRUD
 # ---------------------------------------------------------------------------
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { FolderOpen, User, Wrench } from "lucide-react";
+import { getDirectoryUsers, getWorkspaces, listTools } from "@/lib/api";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -45,53 +46,39 @@ export function MentionPopup({ query, onSelect, onClose, visible }: MentionPopup
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const [workspacesRes, usersRes, toolsRes] = await Promise.all([
-        // Workspaces the user belongs to
-        supabase
-          .from("workspace_members")
-          .select("workspace_id, workspaces(id, name, description)")
-          .eq("user_id", user.id),
-        // All approved users with their agents
-        supabase
-          .from("users")
-          .select("id, display_name, email")
-          .eq("status", "approved"),
-        // All available tools
-        supabase
-          .from("tool_repository")
-          .select("id, name, display_name, description, category"),
+      const [users, workspaces, tools] = await Promise.all([
+        getDirectoryUsers(),
+        getWorkspaces(user.id),
+        listTools(),
       ]);
 
       const all: MentionItem[] = [];
 
       // Workspaces
-      for (const m of workspacesRes.data || []) {
-        const ws = m.workspaces as unknown as { id: string; name: string; description: string | null };
-        if (ws) {
-          all.push({
-            id: ws.id,
-            label: ws.name,
-            sublabel: ws.description || undefined,
-            category: "workspace",
-            insertText: `@workspace:${ws.name}`,
-          });
-        }
+      for (const ws of workspaces) {
+        all.push({
+          id: ws.id,
+          label: ws.name,
+          sublabel: ws.description || undefined,
+          category: "workspace",
+          insertText: `@workspace:${ws.name}`,
+        });
       }
 
-      // Users
-      for (const u of usersRes.data || []) {
-        if (u.id === user.id) continue; // skip self
+      // Users (exclude self)
+      for (const u of users) {
+        if (u.id === user.id) continue;
         all.push({
           id: u.id,
           label: u.display_name || u.email,
-          sublabel: u.email,
+          sublabel: u.agent_name || u.email,
           category: "user",
           insertText: `@user:${u.display_name || u.email}`,
         });
       }
 
       // Tools
-      for (const t of toolsRes.data || []) {
+      for (const t of tools) {
         all.push({
           id: t.id,
           label: t.display_name,
