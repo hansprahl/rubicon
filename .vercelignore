@@ -1,0 +1,7 @@
+api/
+supabase/
+*.py
+requirements.txt
+runtime.txt
+Dockerfile
+railway.json
