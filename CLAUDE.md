@@ -36,18 +36,23 @@ Run `supabase/migrations/001_initial_schema.sql` against your Supabase project v
 ## Key Paths
 - `apps/web/app/(auth)/login/page.tsx` — Login page (magic link + Google)
 - `apps/web/app/(auth)/onboarding/page.tsx` — 6-step onboarding wizard
-- `apps/web/app/dashboard/page.tsx` — Dashboard with agent status card
+- `apps/web/app/dashboard/page.tsx` — Dashboard with agent status card + workspace cards
 - `apps/web/app/chat/page.tsx` — 1:1 chat with your agent
+- `apps/web/app/workspaces/page.tsx` — Workspace list with create flow
+- `apps/web/app/workspaces/[id]/page.tsx` — Workspace detail (Feed/Board/Graph tabs)
 - `apps/web/middleware.ts` — Auth middleware (redirects new users to onboarding)
 - `apps/web/components/nav-sidebar.tsx` — Navigation sidebar
 - `apps/web/components/confidence-badge.tsx` — Color-coded confidence indicator
 - `apps/web/components/agent-status.tsx` — Agent status display (idle/thinking/working)
 - `apps/web/components/document-upload.tsx` — Drag-and-drop file upload with progress
+- `apps/web/components/workspace-card.tsx` — Workspace card with member count + role badge
 - `apps/web/lib/supabase.ts` — Supabase client helpers (browser + server)
-- `apps/web/lib/api.ts` — FastAPI client helpers (agents + onboarding)
+- `apps/web/lib/api.ts` — FastAPI client helpers (agents, onboarding, workspaces, graph)
 - `api/main.py` — FastAPI app with CORS + health check
 - `api/config.py` — Environment config via pydantic-settings
 - `api/routes/agents.py` — Agent CRUD + chat endpoints
+- `api/routes/workspaces.py` — Workspace CRUD, membership, invitations, feed
+- `api/routes/graph.py` — Shared knowledge graph entity + relationship CRUD
 - `api/routes/onboarding.py` — Document upload, parsing, and agent synthesis
 - `api/parsers/idp_parser.py` — Extract goals/expertise from IDP via Claude
 - `api/parsers/ethics_parser.py` — Extract values/worldview from Ethics paper via Claude
@@ -56,12 +61,14 @@ Run `supabase/migrations/001_initial_schema.sql` against your Supabase project v
 - `api/runtime/agent_manager.py` — Agent instance lifecycle management
 - `api/doctrine/orchestrator.py` — Doctrine-powered agent orchestrator
 - `api/doctrine/confidence.py` — Confidence scoring for agent outputs
+- `api/doctrine/store.py` — Shared knowledge graph operations (entities, relationships, confidence)
 - `api/models/agent.py` — Pydantic models for agents and chat
 - `api/models/onboarding.py` — Pydantic models for onboarding and parsed docs
+- `api/models/workspace.py` — Pydantic models for workspaces, feed, entities, relationships
 - `supabase/migrations/001_initial_schema.sql` — Full Postgres schema
 
 ## Environment Variables
 See `.env.example` for all required vars. The frontend needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ## Build Phases
-See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phases 1-3 are complete.
+See `RUBICON_SPEC.md` for the full 8-phase roadmap. Phases 1-5 are complete.

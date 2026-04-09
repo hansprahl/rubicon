@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MessageSquare, CheckCircle } from "lucide-react";
+import { MessageSquare, CheckCircle, FolderOpen } from "lucide-react";
 import { NavSidebar } from "@/components/nav-sidebar";
 import { AgentStatus } from "@/components/agent-status";
-import { getAgentByUser, getApprovalCount } from "@/lib/api";
-import type { AgentProfile } from "@/lib/api";
+import { WorkspaceCard } from "@/components/workspace-card";
+import { getAgentByUser, getApprovalCount, getWorkspaces } from "@/lib/api";
+import type { AgentProfile, WorkspaceWithMembers } from "@/lib/api";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
 export default function DashboardPage() {
   const [agent, setAgent] = useState<AgentProfile | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [workspaces, setWorkspaces] = useState<WorkspaceWithMembers[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -21,12 +23,16 @@ export default function DashboardPage() {
           data: { user },
         } = await supabase.auth.getUser();
         if (!user) return;
-        const profile = await getAgentByUser(user.id);
+        const [profile, { count }, ws] = await Promise.all([
+          getAgentByUser(user.id).catch(() => null),
+          getApprovalCount(user.id),
+          getWorkspaces(user.id).catch(() => [] as WorkspaceWithMembers[]),
+        ]);
         setAgent(profile);
-        const { count } = await getApprovalCount(user.id);
         setPendingCount(count);
+        setWorkspaces(ws);
       } catch {
-        // Agent not set up yet
+        // failed to load
       }
     }
     load();
@@ -88,16 +94,47 @@ export default function DashboardPage() {
                 Review approvals
               </div>
             </Link>
-            <div className="rounded-lg border bg-card p-6">
+            <Link
+              href="/workspaces"
+              className="rounded-lg border bg-card p-6 transition-colors hover:bg-accent"
+            >
               <h3 className="text-sm font-medium text-muted-foreground">
                 Workspaces
               </h3>
-              <p className="mt-2 text-2xl font-bold">0</p>
+              <p className="mt-2 text-2xl font-bold">{workspaces.length}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Join or create a workspace
+                {workspaces.length === 0
+                  ? "Join or create a workspace"
+                  : `${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"} active`}
               </p>
-            </div>
+              <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+                <FolderOpen className="h-3 w-3" />
+                View workspaces
+              </div>
+            </Link>
           </div>
+          {/* Workspace cards */}
+          {workspaces.length > 0 && (
+            <div className="mt-8">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  Your Workspaces
+                </h2>
+                <Link
+                  href="/workspaces"
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  View all
+                </Link>
+              </div>
+              <div className="mt-3 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {workspaces.slice(0, 6).map((ws) => (
+                  <WorkspaceCard key={ws.id} workspace={ws} />
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-8">
             <h2 className="text-sm font-medium text-muted-foreground">
               Recent Activity
