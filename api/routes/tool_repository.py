@@ -145,28 +145,3 @@ async def bulk_enable_tools(agent_id: str, body: BulkEnableRequest):
     return {"status": "enabled", "count": len(body.tool_ids)}
 
 
-@router.get("/agent/{agent_id}/stats")
-async def get_tool_stats(agent_id: str):
-    """Get tool statistics for an agent — counts by category."""
-    sb = _sb()
-    enabled = (
-        sb.table("agent_tools")
-        .select("tool_id")
-        .eq("agent_id", agent_id)
-        .execute()
-    )
-    tool_ids = [r["tool_id"] for r in (enabled.data or [])]
-    if not tool_ids:
-        return {"total_enabled": 0, "by_category": {}}
-
-    tools = (
-        sb.table("tool_repository")
-        .select("category")
-        .in_("id", tool_ids)
-        .execute()
-    )
-    by_cat: dict[str, int] = {}
-    for t in (tools.data or []):
-        by_cat[t["category"]] = by_cat.get(t["category"], 0) + 1
-
-    return {"total_enabled": len(tool_ids), "by_category": by_cat}

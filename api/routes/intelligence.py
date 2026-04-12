@@ -103,8 +103,3 @@ async def trigger_user_check(user_id: UUID):
     return result
 
 
-@router.post("/check")
-async def trigger_full_check():
-    """Trigger intelligence check for all users (admin/scheduled)."""
-    result = await check_and_notify()
-    return result

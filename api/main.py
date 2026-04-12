@@ -9,7 +9,6 @@ from api.routes.agents import router as agents_router
 from api.routes.feedback import router as feedback_router
 from api.routes.anatomy import router as anatomy_router
 from api.routes.approvals import router as approvals_router
-from api.routes.events import router as events_router
 from api.routes.graph import router as graph_router
 from api.routes.milestones import router as milestones_router
 from api.routes.notifications import router as notifications_router
@@ -53,7 +52,6 @@ app.add_middleware(
 app.include_router(agents_router, prefix="/api")
 app.include_router(anatomy_router, prefix="/api")
 app.include_router(approvals_router, prefix="/api")
-app.include_router(events_router, prefix="/api")
 app.include_router(graph_router, prefix="/api")
 app.include_router(milestones_router, prefix="/api")
 app.include_router(north_star_router, prefix="/api")

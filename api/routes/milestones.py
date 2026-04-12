@@ -162,12 +162,3 @@ async def update_task(task_id: UUID, body: AgentTaskUpdate):
     return result.data[0]
 
 
-@router.delete("/tasks/{task_id}")
-async def delete_task(task_id: UUID):
-    sb = _supabase()
-    result = (
-        sb.table("agent_tasks").delete().eq("id", str(task_id)).execute()
-    )
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {"status": "deleted"}
