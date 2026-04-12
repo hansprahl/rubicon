@@ -179,7 +179,6 @@ async def get_anatomy(user_id: str, agent_id: str) -> AgentAnatomy:
 
     # BRAIN — IDP data (goals, expertise)
     has_idp = "idp" in doc_types
-    idp_data = doc_data.get("idp", {}) or {}
     expertise = agent.get("expertise", []) or []
     goals = agent.get("goals", []) or []
     brain_health = 0.0

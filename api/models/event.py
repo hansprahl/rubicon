@@ -22,13 +22,6 @@ class EventCreate(BaseModel):
     payload: dict = Field(default_factory=dict)
 
 
-class EventQuery(BaseModel):
-    event_type: str | None = None
-    source_agent_id: UUID | None = None
-    limit: int = Field(default=50, ge=1, le=200)
-    offset: int = Field(default=0, ge=0)
-
-
 class Disagreement(BaseModel):
     entity_id: str
     entity_name: str

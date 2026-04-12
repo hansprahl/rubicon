@@ -54,17 +54,6 @@ class EventBus:
         key = (workspace_id or "*", event_type)
         self._handlers[key].append(handler)
 
-    def unsubscribe(
-        self,
-        event_type: str,
-        handler: EventHandler,
-        workspace_id: str | None = None,
-    ) -> None:
-        """Remove a previously registered handler."""
-        key = (workspace_id or "*", event_type)
-        handlers = self._handlers.get(key, [])
-        self._handlers[key] = [h for h in handlers if h is not handler]
-
     async def publish(
         self,
         workspace_id: UUID,

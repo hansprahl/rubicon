@@ -6,7 +6,6 @@ class Settings(BaseSettings):
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
     anthropic_api_key: str = ""
-    database_url: str = ""
     cors_origins_str: str = "http://localhost:3000"
     environment: str = "development"
 

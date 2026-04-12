@@ -21,7 +21,6 @@ from api.doctrine.events import event_bus
 from api.doctrine.store import (
     create_relationship,
     mark_disputed,
-    query_entities,
 )
 from api.models.agent import ConfidenceScore
 from api.runtime.agent_worker import MODEL, MAX_TOKENS
@@ -370,10 +369,6 @@ def _format_event_for_feed(event_type: str, payload: dict) -> str | None:
             new = payload.get("new_score", "?")
             return f"Updated confidence on \"{name}\": {old} → {new}"
 
-        case "task_completed":
-            title = payload.get("task_title", "a task")
-            return f"Completed task: \"{title}\""
-
         case _:
             return None
 
@@ -385,4 +380,3 @@ def register_default_handlers() -> None:
     event_bus.subscribe("finding_published", post_event_to_feed)
     event_bus.subscribe("relationship_created", post_event_to_feed)
     event_bus.subscribe("confidence_updated", post_event_to_feed)
-    event_bus.subscribe("task_completed", post_event_to_feed)

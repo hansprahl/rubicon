@@ -11,11 +11,9 @@ from api.config import settings
 from api.doctrine.orchestrator import handle_chat
 from api.models.agent import (
     AgentProfile,
-    AgentProfileCreate,
     AgentProfileUpdate,
     ChatMessage,
     ChatResponse,
-    Conversation,
 )
 from api.runtime.prompt_builder import get_template_prompt
 
@@ -106,18 +104,6 @@ async def ensure_agent(user_id: UUID):
         return {"status": "error", "detail": "Failed to create template agent"}
 
     return {"status": "created", "agent_id": result.data[0]["id"]}
-
-
-@router.post("/", response_model=AgentProfile, status_code=201)
-async def create_agent(user_id: UUID, body: AgentProfileCreate):
-    """Create an agent profile for a user."""
-    sb = _supabase()
-    data = body.model_dump()
-    data["user_id"] = str(user_id)
-    result = sb.table("agent_profiles").insert(data).execute()
-    if not result.data:
-        raise HTTPException(status_code=400, detail="Failed to create agent profile")
-    return result.data[0]
 
 
 @router.get("/{agent_id}", response_model=AgentProfile)
