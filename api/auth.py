@@ -1,12 +1,11 @@
 """Authentication dependency for FastAPI routes.
 
 Extracts user_id from Supabase JWT in Authorization header.
-Falls back to query parameter for backwards compatibility during transition.
 """
 
 from __future__ import annotations
 
-from fastapi import Header, HTTPException, Query
+from fastapi import Header, HTTPException
 from supabase import create_client
 
 from api.config import settings
@@ -18,14 +17,8 @@ def _supabase():
 
 async def get_current_user(
     authorization: str | None = Header(None),
-    admin_id: str | None = Query(None),
 ) -> str:
-    """Extract authenticated user_id from Supabase JWT or fallback to query param.
-
-    Priority: Authorization header > admin_id query param.
-    The query param fallback exists because the frontend currently passes user IDs
-    as query params. This should be migrated to JWT-only auth.
-    """
+    """Extract authenticated user_id from Supabase JWT."""
     if authorization and authorization.startswith("Bearer "):
         token = authorization.removeprefix("Bearer ")
         try:
@@ -36,10 +29,6 @@ async def get_current_user(
         except Exception:
             pass
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    # Fallback: accept admin_id from query param (transition period)
-    if admin_id:
-        return admin_id
 
     raise HTTPException(status_code=401, detail="Authentication required")
 

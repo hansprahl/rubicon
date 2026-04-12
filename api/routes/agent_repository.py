@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-import anthropic
+from anthropic import AsyncAnthropic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from supabase import create_client
@@ -93,7 +93,7 @@ def _get_creator_context(sb, user_id: str) -> str:
     return ""
 
 
-def _synthesize_system_prompt(
+async def _synthesize_system_prompt(
     name: str,
     purpose: str,
     expertise: list[str],
@@ -103,7 +103,7 @@ def _synthesize_system_prompt(
     creator_context: str,
 ) -> str:
     """Use Claude to synthesize a professional system prompt for the custom agent."""
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     doctrine_parts = []
     if doctrine_config.get("confidence_scoring"):
@@ -140,7 +140,7 @@ Write a professional, detailed system prompt for this agent. The prompt should:
 
 Keep the prompt under 800 words. Write ONLY the system prompt text, no preamble or explanation."""
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1200,
         messages=[{"role": "user", "content": synthesis_prompt}],
@@ -330,7 +330,7 @@ async def create_agent(body: CreateAgentRequest, user_id: str):
     creator_context = _get_creator_context(sb, user_id)
 
     # Synthesize system prompt using Claude
-    system_prompt = _synthesize_system_prompt(
+    system_prompt = await _synthesize_system_prompt(
         name=body.name,
         purpose=body.purpose,
         expertise=body.expertise,
@@ -378,8 +378,8 @@ async def build_agent(body: BuildAgentRequest, user_id: str):
     creator_context = _get_creator_context(sb, user_id)
 
     # Generate description from purpose
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    desc_response = client.messages.create(
+    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    desc_response = await client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=200,
         messages=[{
@@ -396,7 +396,7 @@ async def build_agent(body: BuildAgentRequest, user_id: str):
             doctrine_components[key] = True
 
     # Synthesize system prompt
-    system_prompt = _synthesize_system_prompt(
+    system_prompt = await _synthesize_system_prompt(
         name=body.name,
         purpose=body.purpose,
         expertise=body.expertise,

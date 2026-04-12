@@ -238,12 +238,15 @@ async def run_task_queue() -> None:
     logger.info("Task queue worker started")
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
 
+    async def _run_with_semaphore(task: dict) -> None:
+        async with semaphore:
+            await _execute_task(task)
+
     while True:
         try:
             task = await _claim_task()
             if task:
-                async with semaphore:
-                    asyncio.create_task(_execute_task(task))
+                asyncio.create_task(_run_with_semaphore(task))
             else:
                 await asyncio.sleep(POLL_INTERVAL_SECONDS)
         except asyncio.CancelledError:
