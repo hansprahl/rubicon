@@ -11,9 +11,6 @@ from supabase import create_client
 
 from api.config import settings
 from api.models.onboarding import (
-    IDPParsed,
-    EthicsParsed,
-    InsightsParsed,
     OnboardingDoc,
     OnboardingProfileRequest,
     OnboardingSynthesizeRequest,
@@ -336,84 +333,6 @@ async def get_onboarding_docs(user_id: UUID):
 # ---------------------------------------------------------------------------
 
 
-async def _synthesize_system_prompt(
-    display_name: str,
-    agent_name: str,
-    idp_data: dict,
-    ethics_data: dict,
-    insights_data: dict,
-    enrichment_answers: dict[str, str] | None = None,
-) -> str:
-    """Use Claude to synthesize a personalized system prompt from all three documents + enrichment."""
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-
-    enrichment_section = ""
-    if enrichment_answers:
-        question_map = {
-            "current_work": "What they're building/working on right now",
-            "biggest_bet": "Their biggest professional bet or conviction",
-            "decision_framework": "How they make important decisions",
-            "superpower": "What people come to them for",
-            "blind_spot": "What they're actively working to improve",
-            "north_star": "What success looks like in 5 years",
-        }
-        lines = []
-        for key, answer in enrichment_answers.items():
-            label = question_map.get(key, key)
-            lines.append(f"- {label}: {answer}")
-        enrichment_section = f"""
-
-## Deeper Context (self-reported)
-{chr(10).join(lines)}
-"""
-
-    synthesis_prompt = f"""\
-You are building a system prompt for an AI agent that is a digital twin of {display_name}.
-
-This agent, named "{agent_name}", must think like {display_name}, advocate for their perspective, and collaborate with other agents on the Rubicon platform.
-
-Here is the structured data extracted from {display_name}'s three EMBA documents:
-
-## IDP (Individual Development Plan)
-Goals: {idp_data.get('goals', [])}
-Development Areas: {idp_data.get('development_areas', [])}
-Leadership Priorities: {idp_data.get('leadership_priorities', [])}
-Expertise: {idp_data.get('expertise', [])}
-Action Plans: {idp_data.get('action_plans', [])}
-
-## Ethics / Worldview Paper
-Values: {ethics_data.get('values', [])}
-Ethical Framework: {ethics_data.get('ethical_framework', '')}
-Worldview: {ethics_data.get('worldview', '')}
-Key Principles: {ethics_data.get('key_principles', [])}
-
-## Insights Discovery Profile
-Primary Color: {insights_data.get('primary_color', '')}
-Secondary Color: {insights_data.get('secondary_color', '')}
-Strengths: {insights_data.get('strengths', [])}
-Communication Style: {insights_data.get('communication_style', '')}
-Personality Summary: {insights_data.get('personality_summary', '')}
-{enrichment_section}
-Write a detailed system prompt (400-600 words) for this agent. The prompt should:
-1. Define the agent's identity and role as {display_name}'s digital twin
-2. Incorporate their goals, values, and personality
-3. Guide how the agent communicates (matching their Insights profile)
-4. Specify how the agent approaches decisions (based on their ethical framework)
-5. Include their areas of expertise and development goals
-6. If deeper context was provided, weave in their current work, convictions, decision-making approach, and vision — this is what makes the agent sound like them today, not just who they are on paper
-
-Return ONLY the system prompt text, no other commentary.
-"""
-
-    response = await client.messages.create(
-        model=MODEL,
-        max_tokens=2048,
-        messages=[{"role": "user", "content": synthesis_prompt}],
-    )
-
-    return response.content[0].text
-
-
 @router.post("/synthesize/{user_id}", response_model=SynthesizedProfile)
 async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
     """Combine all parsed documents into a synthesized agent profile and create it."""
@@ -438,13 +357,13 @@ async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
     ethics_data = docs_by_type.get("ethics", {})
     insights_data = docs_by_type.get("insights", {})
 
-    # Synthesize system prompt
-    system_prompt = await _synthesize_system_prompt(
+    # Build system prompt using the progressive builder (consistent with doc re-upload path)
+    system_prompt = build_progressive_prompt(
         display_name=user["display_name"],
         agent_name=body.agent_name,
-        idp_data=idp_data,
-        ethics_data=ethics_data,
-        insights_data=insights_data,
+        idp_data=idp_data if idp_data else None,
+        ethics_data=ethics_data if ethics_data else None,
+        insights_data=insights_data if insights_data else None,
         enrichment_answers=body.enrichment_answers,
     )
 
