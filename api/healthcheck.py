@@ -286,8 +286,8 @@ def check_incremental_upload():
 
         # Trigger prompt rebuild
         loop = asyncio.new_event_loop()
-        from api.routes.onboarding import _rebuild_agent_prompt
-        loop.run_until_complete(_rebuild_agent_prompt(sb, TEST_USER_ID))
+        from api.services.prompt_service import rebuild_agent_prompt
+        loop.run_until_complete(rebuild_agent_prompt(sb, TEST_USER_ID))
         loop.close()
 
         # Verify agent was updated
@@ -850,7 +850,7 @@ def check_api_endpoints():
     print("\n── 15. API Endpoints ──")
     import httpx
 
-    base = "http://localhost:8001"
+    base = "http://localhost:8000"
     endpoints = [
         ("GET", "/health", 200),
         ("POST", f"/api/agents/ensure/{TEST_USER_ID}", 200),

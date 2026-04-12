@@ -30,12 +30,11 @@ Analyze the following Insights Discovery profile and extract structured data. Re
     "cool_blue": 0.0
   },
   "strengths": ["list of key strengths identified in the profile"],
-  "weaknesses": ["list of possible weaknesses or blind spots"],
   "communication_style": "description of how this person prefers to communicate and be communicated with",
   "personality_summary": "2-3 sentence summary of the overall personality type"
 }
 
-For color_scores, estimate a 0.0-1.0 score for each color based on the profile content. Be thorough with strengths and weaknesses.
+For color_scores, estimate a 0.0-1.0 score for each color based on the profile content. Be thorough with strengths.
 """
 
 

@@ -244,8 +244,8 @@ Return ONLY the JSON. No commentary, no markdown fences."""
 
 async def _update_agent_prompt_with_soul(sb, user_id: str, north_star: dict):
     """Rebuild the agent's system prompt to include the North Star as the Soul."""
-    from api.routes.onboarding import _rebuild_agent_prompt
-    await _rebuild_agent_prompt(sb, user_id)
+    from api.services.prompt_service import rebuild_agent_prompt
+    await rebuild_agent_prompt(sb, user_id)
 
 
 # ---------------------------------------------------------------------------
