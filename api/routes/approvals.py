@@ -6,9 +6,8 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from supabase import create_client
 
-from api.config import settings
+from api.db import get_sb
 from api.models.approval import (
     Approval,
     ApprovalCreate,
@@ -20,14 +19,10 @@ from api.models.approval import (
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 
 
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 @router.get("/user/{user_id}", response_model=list[ApprovalWithAgent])
 async def list_approvals(user_id: UUID, status: str = "pending"):
     """List approvals for a user, optionally filtered by status."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("approvals")
         .select("*, agent_profiles(agent_name)")
@@ -55,7 +50,7 @@ async def list_approvals(user_id: UUID, status: str = "pending"):
 @router.get("/user/{user_id}/count")
 async def approval_count(user_id: UUID):
     """Get the count of pending approvals for a user."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("approvals")
         .select("id", count="exact")
@@ -69,7 +64,7 @@ async def approval_count(user_id: UUID):
 @router.get("/{approval_id}", response_model=ApprovalWithAgent)
 async def get_approval(approval_id: UUID):
     """Get a single approval by ID."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("approvals")
         .select("*, agent_profiles(agent_name)")
@@ -92,7 +87,7 @@ async def get_approval(approval_id: UUID):
 @router.post("/{approval_id}/approve", response_model=Approval)
 async def approve_action(approval_id: UUID, body: ApprovalResolve | None = None):
     """Approve a pending action."""
-    sb = _supabase()
+    sb = get_sb()
     update = {
         "status": "approved",
         "resolved_at": datetime.now(timezone.utc).isoformat(),
@@ -114,7 +109,7 @@ async def approve_action(approval_id: UUID, body: ApprovalResolve | None = None)
 @router.post("/{approval_id}/reject", response_model=Approval)
 async def reject_action(approval_id: UUID, body: ApprovalResolve | None = None):
     """Reject a pending action."""
-    sb = _supabase()
+    sb = get_sb()
     update = {
         "status": "rejected",
         "resolved_at": datetime.now(timezone.utc).isoformat(),
@@ -136,7 +131,7 @@ async def reject_action(approval_id: UUID, body: ApprovalResolve | None = None):
 @router.post("/{approval_id}/edit-approve", response_model=Approval)
 async def edit_and_approve(approval_id: UUID, body: ApprovalEditAndApprove):
     """Edit the payload and approve in one step."""
-    sb = _supabase()
+    sb = get_sb()
     update = {
         "payload": body.payload,
         "status": "approved",
@@ -159,7 +154,7 @@ async def edit_and_approve(approval_id: UUID, body: ApprovalEditAndApprove):
 @router.post("/", response_model=Approval, status_code=201)
 async def create_approval(body: ApprovalCreate):
     """Create a new approval request (called by agent worker)."""
-    sb = _supabase()
+    sb = get_sb()
     data = body.model_dump(mode="json")
     result = sb.table("approvals").insert(data).execute()
     if not result.data:

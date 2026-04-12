@@ -10,9 +10,7 @@ from __future__ import annotations
 import json
 from uuid import UUID
 
-from supabase import create_client
-
-from api.config import settings
+from api.db import get_sb
 
 
 AGENT_TOOLS = [
@@ -145,8 +143,10 @@ AGENT_TOOLS = [
 ]
 
 
-def _sb():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+def _get_autonomy(sb, agent_id: str) -> int:
+    """Fetch an agent's autonomy level (default 2)."""
+    result = sb.table("agent_profiles").select("autonomy_level").eq("id", agent_id).execute()
+    return result.data[0]["autonomy_level"] if result.data else 2
 
 
 async def execute_tool(
@@ -169,7 +169,7 @@ async def execute_tool(
 # -- Tool handlers --
 
 async def _search_workspace(tool_input: dict, agent_id: str, user_id: str) -> str:
-    sb = _sb()
+    sb = get_sb()
     workspace_id = tool_input["workspace_id"]
     query = tool_input["query"]
     limit = tool_input.get("limit", 10)
@@ -204,12 +204,9 @@ async def _search_workspace(tool_input: dict, agent_id: str, user_id: str) -> st
 async def _publish_entity(tool_input: dict, agent_id: str, user_id: str) -> str:
     from api.doctrine.orchestrator import requires_approval, submit_for_approval
 
-    sb = _sb()
+    sb = get_sb()
     workspace_id = tool_input["workspace_id"]
-
-    # Check autonomy level
-    agent_result = sb.table("agent_profiles").select("autonomy_level").eq("id", agent_id).execute()
-    autonomy = agent_result.data[0]["autonomy_level"] if agent_result.data else 2
+    autonomy = _get_autonomy(sb, agent_id)
 
     entity_data = {
         "workspace_id": workspace_id,
@@ -250,12 +247,9 @@ async def _publish_entity(tool_input: dict, agent_id: str, user_id: str) -> str:
 async def _create_relationship(tool_input: dict, agent_id: str, user_id: str) -> str:
     from api.doctrine.orchestrator import requires_approval, submit_for_approval
 
-    sb = _sb()
+    sb = get_sb()
     workspace_id = tool_input["workspace_id"]
-
-    # Check autonomy
-    agent_result = sb.table("agent_profiles").select("autonomy_level").eq("id", agent_id).execute()
-    autonomy = agent_result.data[0]["autonomy_level"] if agent_result.data else 2
+    autonomy = _get_autonomy(sb, agent_id)
 
     rel_data = {
         "workspace_id": workspace_id,
@@ -292,13 +286,10 @@ async def _create_relationship(tool_input: dict, agent_id: str, user_id: str) ->
 async def _post_message(tool_input: dict, agent_id: str, user_id: str) -> str:
     from api.doctrine.orchestrator import requires_approval, submit_for_approval
 
-    sb = _sb()
+    sb = get_sb()
     workspace_id = tool_input["workspace_id"]
     content = tool_input["content"]
-
-    # Check autonomy
-    agent_result = sb.table("agent_profiles").select("autonomy_level,agent_name").eq("id", agent_id).execute()
-    autonomy = agent_result.data[0]["autonomy_level"] if agent_result.data else 2
+    autonomy = _get_autonomy(sb, agent_id)
 
     if requires_approval("send_message", autonomy):
         approval = await submit_for_approval(
@@ -332,7 +323,7 @@ async def _post_message(tool_input: dict, agent_id: str, user_id: str) -> str:
 
 
 async def _list_workspace_entities(tool_input: dict, agent_id: str, user_id: str) -> str:
-    sb = _sb()
+    sb = get_sb()
     workspace_id = tool_input["workspace_id"]
 
     query = (
@@ -350,7 +341,7 @@ async def _list_workspace_entities(tool_input: dict, agent_id: str, user_id: str
 
 
 async def _get_my_profile(tool_input: dict, agent_id: str, user_id: str) -> str:
-    sb = _sb()
+    sb = get_sb()
     result = sb.table("agent_profiles").select(
         "agent_name,expertise,goals,values,communication_style,fidelity,autonomy_level,status"
     ).eq("id", agent_id).execute()
@@ -383,7 +374,7 @@ async def _get_my_profile(tool_input: dict, agent_id: str, user_id: str) -> str:
 
 
 async def _list_workspace_members(tool_input: dict, agent_id: str, user_id: str) -> str:
-    sb = _sb()
+    sb = get_sb()
     workspace_id = tool_input["workspace_id"]
 
     members = (
@@ -414,7 +405,7 @@ async def _list_workspace_members(tool_input: dict, agent_id: str, user_id: str)
 
 
 async def _create_task(tool_input: dict, agent_id: str, user_id: str) -> str:
-    sb = _sb()
+    sb = get_sb()
     task_data = {
         "agent_id": agent_id,
         "title": tool_input["title"],
@@ -435,7 +426,7 @@ async def _create_task(tool_input: dict, agent_id: str, user_id: str) -> str:
 
 
 async def _list_my_workspaces(tool_input: dict, agent_id: str, user_id: str) -> str:
-    sb = _sb()
+    sb = get_sb()
     # Get workspaces the user is a member of
     memberships = (
         sb.table("workspace_members")
@@ -469,7 +460,7 @@ async def _list_my_workspaces(tool_input: dict, agent_id: str, user_id: str) -> 
 
 
 async def _invite_all_users_to_workspace(tool_input: dict, agent_id: str, user_id: str) -> str:
-    sb = _sb()
+    sb = get_sb()
     workspace_id = tool_input["workspace_id"]
 
     # Verify the user is the workspace owner

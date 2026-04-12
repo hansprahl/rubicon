@@ -19,17 +19,11 @@ from collections import defaultdict
 from typing import Callable, Coroutine
 from uuid import UUID
 
-from supabase import create_client
-
-from api.config import settings
+from api.db import get_sb
 
 
 # Type alias for async event handlers
 EventHandler = Callable[[dict], Coroutine]
-
-
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 class EventBus:
@@ -65,7 +59,7 @@ class EventBus:
 
         Returns the persisted event row.
         """
-        sb = _supabase()
+        sb = get_sb()
         event_data = {
             "workspace_id": str(workspace_id),
             "source_agent_id": str(source_agent_id),
@@ -100,7 +94,7 @@ async def get_events(
     offset: int = 0,
 ) -> list[dict]:
     """Query persisted events with optional filters."""
-    sb = _supabase()
+    sb = get_sb()
     query = (
         sb.table("agent_events")
         .select("*")
@@ -117,7 +111,7 @@ async def get_events(
 
 async def get_event(event_id: UUID) -> dict | None:
     """Get a single event by ID."""
-    sb = _supabase()
+    sb = get_sb()
     result = sb.table("agent_events").select("*").eq("id", str(event_id)).execute()
     return result.data[0] if result.data else None
 

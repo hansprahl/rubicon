@@ -5,9 +5,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from supabase import create_client
 
-from api.config import settings
+from api.db import get_sb
 from api.runtime.rubicon_intelligence import (
     generate_user_suggestions,
     generate_cohort_digest,
@@ -18,14 +17,10 @@ from api.runtime.rubicon_intelligence import (
 router = APIRouter(prefix="/intelligence", tags=["intelligence"])
 
 
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 @router.get("/suggestions/{user_id}")
 async def get_suggestions(user_id: UUID):
     """Get personalized suggestions for a user (from DB + generated if needed)."""
-    sb = _supabase()
+    sb = get_sb()
     uid = str(user_id)
 
     # Fetch existing non-dismissed suggestions
@@ -72,7 +67,7 @@ async def get_suggestions(user_id: UUID):
 @router.post("/suggestions/{suggestion_id}/dismiss")
 async def dismiss_suggestion(suggestion_id: UUID):
     """Dismiss a suggestion."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("intelligence_suggestions")
         .update({"dismissed": True})

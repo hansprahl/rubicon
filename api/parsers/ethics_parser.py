@@ -40,13 +40,7 @@ async def parse_ethics(document_text: str) -> EthicsParsed:
         ],
     )
 
-    import json
+    from api.parsers import parse_llm_json
 
-    text = response.content[0].text
-    if "```json" in text:
-        text = text.split("```json")[1].split("```")[0]
-    elif "```" in text:
-        text = text.split("```")[1].split("```")[0]
-
-    data = json.loads(text.strip())
+    data = parse_llm_json(response.content[0].text)
     return EthicsParsed(**data)

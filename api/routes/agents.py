@@ -5,9 +5,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from supabase import create_client
 
-from api.config import settings
+from api.db import get_sb
 from api.doctrine.orchestrator import handle_chat
 from api.models.agent import (
     AgentProfile,
@@ -20,10 +19,6 @@ from api.runtime.prompt_builder import get_template_prompt
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
@@ -32,7 +27,7 @@ def _supabase():
 @router.post("/ensure/{user_id}")
 async def ensure_agent(user_id: UUID):
     """Ensure a user and template agent exist. Idempotent — safe to call on every login."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Check if agent already exists
     existing = sb.table("agent_profiles").select("id").eq("user_id", str(user_id)).execute()
@@ -109,7 +104,7 @@ async def ensure_agent(user_id: UUID):
 @router.get("/{agent_id}", response_model=AgentProfile)
 async def get_agent(agent_id: UUID):
     """Get an agent profile by ID."""
-    sb = _supabase()
+    sb = get_sb()
     result = sb.table("agent_profiles").select("*").eq("id", str(agent_id)).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -119,7 +114,7 @@ async def get_agent(agent_id: UUID):
 @router.get("/user/{user_id}", response_model=AgentProfile)
 async def get_agent_by_user(user_id: UUID):
     """Get the agent profile for a specific user."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("agent_profiles").select("*").eq("user_id", str(user_id)).execute()
     )
@@ -131,7 +126,7 @@ async def get_agent_by_user(user_id: UUID):
 @router.patch("/{agent_id}", response_model=AgentProfile)
 async def update_agent(agent_id: UUID, body: AgentProfileUpdate):
     """Update an agent profile."""
-    sb = _supabase()
+    sb = get_sb()
     data = body.model_dump(exclude_none=True)
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -151,7 +146,7 @@ async def update_agent(agent_id: UUID, body: AgentProfileUpdate):
 @router.post("/{agent_id}/chat", response_model=ChatResponse)
 async def chat_with_agent(agent_id: UUID, body: ChatMessage):
     """Send a message to an agent and get a response with confidence scoring."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Fetch agent profile
     agent_result = (
@@ -252,7 +247,7 @@ async def chat_with_agent(agent_id: UUID, body: ChatMessage):
 @router.get("/{agent_id}/conversations")
 async def list_conversations(agent_id: UUID):
     """List all conversations for an agent, newest first."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("conversations")
         .select("*")
@@ -287,7 +282,7 @@ async def list_conversations(agent_id: UUID):
 @router.post("/{agent_id}/conversations")
 async def create_conversation(agent_id: UUID, title: str = "New chat"):
     """Create a new conversation."""
-    sb = _supabase()
+    sb = get_sb()
     agent_result = sb.table("agent_profiles").select("user_id").eq("id", str(agent_id)).execute()
     if not agent_result.data:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -305,7 +300,7 @@ async def create_conversation(agent_id: UUID, title: str = "New chat"):
 @router.patch("/{agent_id}/conversations/{conversation_id}")
 async def update_conversation(agent_id: UUID, conversation_id: UUID, title: str | None = None, status: str | None = None):
     """Update a conversation title or status."""
-    sb = _supabase()
+    sb = get_sb()
     data = {}
     if title is not None:
         data["title"] = title
@@ -328,7 +323,7 @@ async def update_conversation(agent_id: UUID, conversation_id: UUID, title: str 
 @router.delete("/{agent_id}/conversations/{conversation_id}")
 async def delete_conversation(agent_id: UUID, conversation_id: UUID):
     """Delete a conversation and its messages."""
-    sb = _supabase()
+    sb = get_sb()
     # Delete messages first (cascade should handle this, but be explicit)
     sb.table("messages").delete().eq("conversation_id", str(conversation_id)).execute()
     sb.table("conversations").delete().eq("id", str(conversation_id)).eq("agent_id", str(agent_id)).execute()
@@ -338,7 +333,7 @@ async def delete_conversation(agent_id: UUID, conversation_id: UUID):
 @router.get("/{agent_id}/messages")
 async def get_messages(agent_id: UUID, conversation_id: str | None = None, limit: int = 50):
     """Get messages for an agent, optionally filtered by conversation."""
-    sb = _supabase()
+    sb = get_sb()
     query = sb.table("messages").select("*").eq("agent_id", str(agent_id))
     if conversation_id:
         query = query.eq("conversation_id", conversation_id)

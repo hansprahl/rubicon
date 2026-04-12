@@ -5,16 +5,11 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from supabase import create_client
 
-from api.config import settings
+from api.db import get_sb
 from api.runtime.anatomy import get_anatomy, get_heartbeat_status
 
 router = APIRouter(prefix="/anatomy", tags=["anatomy"])
-
-
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 def _serialize_anatomy(anatomy):
@@ -50,7 +45,7 @@ def _serialize_anatomy(anatomy):
 @router.get("/{user_id}")
 async def get_user_anatomy(user_id: UUID):
     """Get full anatomy for a user's agent."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Look up agent for this user
     result = sb.table("agent_profiles").select("id").eq("user_id", str(user_id)).execute()
@@ -69,7 +64,7 @@ async def get_user_anatomy(user_id: UUID):
 @router.get("/{user_id}/heartbeat")
 async def get_user_heartbeat(user_id: UUID):
     """Quick health check — just the heartbeat."""
-    sb = _supabase()
+    sb = get_sb()
 
     result = sb.table("agent_profiles").select("id").eq("user_id", str(user_id)).execute()
     if not result.data:

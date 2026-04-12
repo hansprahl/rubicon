@@ -7,9 +7,9 @@ from uuid import UUID
 
 import anthropic
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from supabase import create_client
 
 from api.config import settings
+from api.db import get_sb
 from api.models.onboarding import (
     OnboardingDoc,
     OnboardingProfileRequest,
@@ -24,10 +24,6 @@ from api.runtime.prompt_builder import build_progressive_prompt, calculate_fidel
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 MODEL = "claude-sonnet-4-20250514"
-
-
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 def _extract_text_from_pdf(content: bytes) -> str:
@@ -119,7 +115,7 @@ async def _extract_text(file_content: bytes, filename: str) -> str:
 @router.post("/profile/{user_id}")
 async def setup_profile(user_id: UUID, body: OnboardingProfileRequest):
     """Create or update the user's display name and avatar."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Get email from auth.users
     auth_user = sb.auth.admin.get_user_by_id(str(user_id))
@@ -167,7 +163,7 @@ async def upload_document(
     if doc_type not in ("idp", "ethics", "insights"):
         raise HTTPException(status_code=400, detail=f"Invalid doc_type: {doc_type}")
 
-    sb = _supabase()
+    sb = get_sb()
     file_content = await file.read()
 
     # Limit file size to 10MB
@@ -318,7 +314,7 @@ async def _rebuild_agent_prompt(sb, user_id: str):
 @router.get("/docs/{user_id}")
 async def get_onboarding_docs(user_id: UUID):
     """Get all onboarding documents and parsed data for a user."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("onboarding_docs")
         .select("*")
@@ -336,7 +332,7 @@ async def get_onboarding_docs(user_id: UUID):
 @router.post("/synthesize/{user_id}", response_model=SynthesizedProfile)
 async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
     """Combine all parsed documents into a synthesized agent profile and create it."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Get user info
     user_result = sb.table("users").select("*").eq("id", str(user_id)).execute()
@@ -417,7 +413,7 @@ async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
 @router.get("/status/{user_id}")
 async def onboarding_status(user_id: UUID):
     """Check if a user has completed onboarding."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Check for agent profile
     agent_result = (

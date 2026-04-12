@@ -4,15 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from supabase import create_client
 
-from api.config import settings
+from api.db import get_sb
 
 router = APIRouter(prefix="/tools", tags=["tools"])
-
-
-def _sb():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 # -- Models --
@@ -26,7 +21,7 @@ class BulkEnableRequest(BaseModel):
 @router.get("")
 async def list_tools(category: str | None = None):
     """List all tools in the repository, optionally filtered by category."""
-    sb = _sb()
+    sb = get_sb()
     query = sb.table("tool_repository").select("*").order("category").order("name")
     if category:
         query = query.eq("category", category)
@@ -37,7 +32,7 @@ async def list_tools(category: str | None = None):
 @router.get("/categories")
 async def list_categories():
     """List all categories with tool counts."""
-    sb = _sb()
+    sb = get_sb()
     result = sb.table("tool_repository").select("category").execute()
     counts: dict[str, int] = {}
     for row in (result.data or []):
@@ -49,7 +44,7 @@ async def list_categories():
 @router.get("/{tool_id}")
 async def get_tool(tool_id: str):
     """Get a single tool's details."""
-    sb = _sb()
+    sb = get_sb()
     result = sb.table("tool_repository").select("*").eq("id", tool_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Tool not found")
@@ -59,7 +54,7 @@ async def get_tool(tool_id: str):
 @router.get("/agent/{agent_id}")
 async def get_agent_tools(agent_id: str):
     """List tools enabled for a specific agent."""
-    sb = _sb()
+    sb = get_sb()
     # Join through agent_tools to get full tool data
     enabled = (
         sb.table("agent_tools")
@@ -92,7 +87,7 @@ async def get_agent_tools(agent_id: str):
 @router.post("/agent/{agent_id}/{tool_id}")
 async def enable_tool(agent_id: str, tool_id: str):
     """Enable a tool for an agent."""
-    sb = _sb()
+    sb = get_sb()
 
     # Verify agent exists
     agent = sb.table("agent_profiles").select("id").eq("id", agent_id).execute()
@@ -116,7 +111,7 @@ async def enable_tool(agent_id: str, tool_id: str):
 @router.delete("/agent/{agent_id}/{tool_id}")
 async def disable_tool(agent_id: str, tool_id: str):
     """Disable a tool for an agent."""
-    sb = _sb()
+    sb = get_sb()
     sb.table("agent_tools").delete().eq("agent_id", agent_id).eq("tool_id", tool_id).execute()
     return {"status": "disabled"}
 
@@ -124,7 +119,7 @@ async def disable_tool(agent_id: str, tool_id: str):
 @router.post("/agent/{agent_id}/bulk")
 async def bulk_enable_tools(agent_id: str, body: BulkEnableRequest):
     """Enable multiple tools at once for an agent."""
-    sb = _sb()
+    sb = get_sb()
 
     # Verify agent exists
     agent = sb.table("agent_profiles").select("id").eq("id", agent_id).execute()

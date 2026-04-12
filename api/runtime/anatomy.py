@@ -13,9 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from supabase import create_client
-
-from api.config import settings
+from api.db import get_sb
 
 
 # -- Models --
@@ -92,15 +90,11 @@ def get_heartbeat_status(anatomy: AgentAnatomy) -> str:
     return "thriving"
 
 
-def _sb():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 # -- Main computation --
 
 async def get_anatomy(user_id: str, agent_id: str) -> AgentAnatomy:
     """Compute the full anatomy for an agent. Pure DB queries, no Claude calls."""
-    sb = _sb()
+    sb = get_sb()
 
     # Fetch agent profile
     agent_result = sb.table("agent_profiles").select("*").eq("id", agent_id).execute()

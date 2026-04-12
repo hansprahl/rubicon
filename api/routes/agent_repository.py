@@ -7,15 +7,11 @@ from uuid import UUID
 from anthropic import AsyncAnthropic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from supabase import create_client
 
 from api.config import settings
+from api.db import get_sb
 
 router = APIRouter(prefix="/agent-repo", tags=["agent-repo"])
-
-
-def _sb():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 # ── Pydantic Models ──
@@ -190,7 +186,7 @@ async def list_agents(
     user_id: str | None = None,
 ):
     """List custom agents with filtering and sorting."""
-    sb = _sb()
+    sb = get_sb()
     query = sb.table("custom_agents").select("*, users!custom_agents_created_by_fkey(display_name)")
 
     # Only show active agents by default
@@ -228,7 +224,7 @@ async def list_agents(
 @router.get("/categories")
 async def list_categories():
     """List categories with counts."""
-    sb = _sb()
+    sb = get_sb()
     result = sb.table("custom_agents").select("category").eq("status", "active").execute()
     counts: dict[str, int] = {}
     for row in (result.data or []):
@@ -240,7 +236,7 @@ async def list_categories():
 @router.get("/my-agents")
 async def my_agents(user_id: str):
     """List agents created by the current user (all statuses)."""
-    sb = _sb()
+    sb = get_sb()
     result = (
         sb.table("custom_agents")
         .select("*")
@@ -254,7 +250,7 @@ async def my_agents(user_id: str):
 @router.get("/my-enabled")
 async def my_enabled_agents(user_id: str):
     """List agents the user has enabled/cloned."""
-    sb = _sb()
+    sb = get_sb()
     # Get the junction table entries
     enabled = (
         sb.table("user_custom_agents")
@@ -288,7 +284,7 @@ async def my_enabled_agents(user_id: str):
 @router.get("/{agent_id}")
 async def get_agent(agent_id: str):
     """Get a single custom agent with full details."""
-    sb = _sb()
+    sb = get_sb()
     result = (
         sb.table("custom_agents")
         .select("*, users!custom_agents_created_by_fkey(display_name)")
@@ -324,7 +320,7 @@ async def get_agent(agent_id: str):
 @router.post("")
 async def create_agent(body: CreateAgentRequest, user_id: str):
     """Create a new custom agent."""
-    sb = _sb()
+    sb = get_sb()
 
     # Get creator context for prompt personalization
     creator_context = _get_creator_context(sb, user_id)
@@ -372,7 +368,7 @@ async def create_agent(body: CreateAgentRequest, user_id: str):
 @router.post("/build")
 async def build_agent(body: BuildAgentRequest, user_id: str):
     """Guided builder endpoint — synthesizes description + system prompt from wizard data."""
-    sb = _sb()
+    sb = get_sb()
 
     # Get creator context
     creator_context = _get_creator_context(sb, user_id)
@@ -438,7 +434,7 @@ async def build_agent(body: BuildAgentRequest, user_id: str):
 @router.patch("/{agent_id}")
 async def update_agent(agent_id: str, body: UpdateAgentRequest, user_id: str):
     """Update a custom agent (owner only)."""
-    sb = _sb()
+    sb = get_sb()
 
     # Verify ownership
     existing = sb.table("custom_agents").select("created_by").eq("id", agent_id).execute()
@@ -462,7 +458,7 @@ async def update_agent(agent_id: str, body: UpdateAgentRequest, user_id: str):
 @router.delete("/{agent_id}")
 async def delete_agent(agent_id: str, user_id: str):
     """Archive a custom agent (owner only). Soft delete via status change."""
-    sb = _sb()
+    sb = get_sb()
 
     existing = sb.table("custom_agents").select("created_by").eq("id", agent_id).execute()
     if not existing.data:
@@ -477,7 +473,7 @@ async def delete_agent(agent_id: str, user_id: str):
 @router.post("/{agent_id}/clone")
 async def clone_agent(agent_id: str, user_id: str):
     """Enable/clone a custom agent for your account."""
-    sb = _sb()
+    sb = get_sb()
 
     # Verify agent exists and is active
     agent = sb.table("custom_agents").select("id,name,clone_count").eq("id", agent_id).eq("status", "active").execute()
@@ -500,7 +496,7 @@ async def clone_agent(agent_id: str, user_id: str):
 @router.delete("/{agent_id}/clone")
 async def unclone_agent(agent_id: str, user_id: str):
     """Disable/remove a cloned custom agent."""
-    sb = _sb()
+    sb = get_sb()
     sb.table("user_custom_agents").delete().eq("user_id", user_id).eq("custom_agent_id", agent_id).execute()
 
     # Decrement clone count (floor at 0)
@@ -515,7 +511,7 @@ async def unclone_agent(agent_id: str, user_id: str):
 @router.post("/{agent_id}/rate")
 async def rate_agent(agent_id: str, body: RateAgentRequest, user_id: str):
     """Rate a custom agent (1-5 stars + optional review)."""
-    sb = _sb()
+    sb = get_sb()
 
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")

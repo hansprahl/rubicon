@@ -10,14 +10,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from supabase import create_client
-
-from api.config import settings
+from api.db import get_sb
 from api.models.agent import ConfidenceScore
-
-
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 async def create_relationship(
@@ -30,7 +24,7 @@ async def create_relationship(
     metadata: dict | None = None,
 ) -> dict:
     """Create a confidence-scored relationship between two entities."""
-    sb = _supabase()
+    sb = get_sb()
     data = {
         "workspace_id": str(workspace_id),
         "source_entity_id": str(source_entity_id),
@@ -49,7 +43,7 @@ async def create_relationship(
 
 async def mark_disputed(entity_id: UUID) -> dict:
     """Mark an entity as disputed (when agents disagree)."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("shared_entities")
         .update({"status": "disputed"})

@@ -9,10 +9,7 @@ from fastapi import Header, HTTPException
 from supabase import create_client
 
 from api.config import settings
-
-
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+from api.db import get_sb
 
 
 async def get_current_user(
@@ -35,7 +32,7 @@ async def get_current_user(
 
 def require_admin(user_id: str) -> None:
     """Raise 403 if user is not an admin."""
-    sb = _supabase()
+    sb = get_sb()
     result = sb.table("users").select("is_admin").eq("id", user_id).execute()
     if not result.data or not result.data[0].get("is_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")

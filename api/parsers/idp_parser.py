@@ -41,14 +41,7 @@ async def parse_idp(document_text: str) -> IDPParsed:
         ],
     )
 
-    import json
+    from api.parsers import parse_llm_json
 
-    text = response.content[0].text
-    # Extract JSON from response (handle markdown code blocks)
-    if "```json" in text:
-        text = text.split("```json")[1].split("```")[0]
-    elif "```" in text:
-        text = text.split("```")[1].split("```")[0]
-
-    data = json.loads(text.strip())
+    data = parse_llm_json(response.content[0].text)
     return IDPParsed(**data)

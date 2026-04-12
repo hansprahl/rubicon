@@ -6,16 +6,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from supabase import create_client
 
 from api.auth import get_current_user, require_admin
-from api.config import settings
+from api.db import get_sb
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +21,7 @@ def _supabase():
 @router.get("/users")
 async def list_users(current_user: str = Depends(get_current_user)):
     """List all users with their status. Admin only."""
-    sb = _supabase()
+    sb = get_sb()
     require_admin(current_user)
 
     result = (
@@ -63,7 +58,7 @@ async def update_user_status(
     current_user: str = Depends(get_current_user),
 ):
     """Approve or reject a user. Admin only."""
-    sb = _supabase()
+    sb = get_sb()
     require_admin(current_user)
 
     if body.status not in ("approved", "rejected"):
@@ -101,7 +96,7 @@ async def toggle_admin(
     current_user: str = Depends(get_current_user),
 ):
     """Toggle admin status for a user. Admin only."""
-    sb = _supabase()
+    sb = get_sb()
     require_admin(current_user)
 
     # Get current admin status
@@ -121,7 +116,7 @@ async def check_user_status(user_id: UUID):
 
     Only returns status and is_admin — no sensitive data exposed.
     """
-    sb = _supabase()
+    sb = get_sb()
     result = sb.table("users").select("status, is_admin").eq("id", str(user_id)).execute()
 
     if not result.data:

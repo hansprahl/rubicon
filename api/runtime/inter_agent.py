@@ -16,6 +16,7 @@ from uuid import UUID
 import anthropic
 
 from api.config import settings
+from api.db import get_sb
 from api.doctrine.confidence import parse_confidence
 from api.doctrine.events import event_bus
 from api.doctrine.store import (
@@ -28,15 +29,9 @@ from api.runtime.agent_worker import MODEL, MAX_TOKENS
 logger = logging.getLogger(__name__)
 
 
-def _supabase():
-    from supabase import create_client
-
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 async def _get_workspace_agents(workspace_id: UUID) -> list[dict]:
     """Get all agent profiles for members of a workspace."""
-    sb = _supabase()
+    sb = get_sb()
     members = (
         sb.table("workspace_members")
         .select("user_id")
@@ -178,7 +173,7 @@ async def detect_disagreements(
     the entity is marked as disputed and a disagreement_flagged event is
     published for human review.
     """
-    sb = _supabase()
+    sb = get_sb()
     eid = str(entity_id)
 
     contradictions = (
@@ -289,7 +284,7 @@ async def handle_finding_published(event: dict) -> None:
         return
 
     # Get the published entity
-    sb = _supabase()
+    sb = get_sb()
     entity_result = (
         sb.table("shared_entities").select("*").eq("id", entity_id).execute()
     )
@@ -332,7 +327,7 @@ async def post_event_to_feed(event: dict) -> None:
     if not content:
         return
 
-    sb = _supabase()
+    sb = get_sb()
     sb.table("messages").insert(
         {
             "workspace_id": str(workspace_id),

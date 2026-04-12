@@ -5,9 +5,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from supabase import create_client
 
-from api.config import settings
+from api.db import get_sb
 from api.models.workspace import (
     FeedMessage,
     FeedMessageCreate,
@@ -22,10 +21,6 @@ from api.models.workspace import (
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 # ---------------------------------------------------------------------------
 # User directory (for mentions / collaboration)
 # ---------------------------------------------------------------------------
@@ -34,7 +29,7 @@ def _supabase():
 @router.get("/directory/users")
 async def list_approved_users():
     """List all approved users with their agent info. Used for @ mentions."""
-    sb = _supabase()
+    sb = get_sb()
     users = (
         sb.table("users")
         .select("id, display_name, email, avatar_url")
@@ -66,7 +61,7 @@ async def list_approved_users():
 @router.post("/", response_model=Workspace, status_code=201)
 async def create_workspace(user_id: UUID, body: WorkspaceCreate):
     """Create a workspace and add the creator as owner."""
-    sb = _supabase()
+    sb = get_sb()
     data = body.model_dump()
     data["created_by"] = str(user_id)
     result = sb.table("workspaces").insert(data).execute()
@@ -89,7 +84,7 @@ async def create_workspace(user_id: UUID, body: WorkspaceCreate):
 @router.get("/user/{user_id}", response_model=list[WorkspaceWithMembers])
 async def list_workspaces(user_id: UUID):
     """List all workspaces the user is a member of."""
-    sb = _supabase()
+    sb = get_sb()
     # Get workspace IDs for this user
     memberships = (
         sb.table("workspace_members")
@@ -135,7 +130,7 @@ async def list_workspaces(user_id: UUID):
 @router.get("/{workspace_id}", response_model=WorkspaceWithMembers)
 async def get_workspace(workspace_id: UUID, user_id: UUID | None = None):
     """Get workspace details."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("workspaces").select("*").eq("id", str(workspace_id)).execute()
     )
@@ -172,7 +167,7 @@ async def get_workspace(workspace_id: UUID, user_id: UUID | None = None):
 @router.patch("/{workspace_id}", response_model=Workspace)
 async def update_workspace(workspace_id: UUID, body: WorkspaceUpdate):
     """Update workspace details."""
-    sb = _supabase()
+    sb = get_sb()
     data = body.model_dump(exclude_none=True)
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -195,7 +190,7 @@ async def update_workspace(workspace_id: UUID, body: WorkspaceUpdate):
 @router.get("/{workspace_id}/members", response_model=list[WorkspaceMember])
 async def list_members(workspace_id: UUID):
     """List members of a workspace."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("workspace_members")
         .select("*, users(display_name)")
@@ -215,7 +210,7 @@ async def list_members(workspace_id: UUID):
 @router.post("/{workspace_id}/join", response_model=WorkspaceMember)
 async def join_workspace(workspace_id: UUID, user_id: UUID):
     """Join a workspace as a member."""
-    sb = _supabase()
+    sb = get_sb()
     # Check workspace exists
     ws = sb.table("workspaces").select("id").eq("id", str(workspace_id)).execute()
     if not ws.data:
@@ -247,7 +242,7 @@ async def join_workspace(workspace_id: UUID, user_id: UUID):
 @router.delete("/{workspace_id}")
 async def delete_workspace(workspace_id: UUID, user_id: UUID):
     """Delete a workspace and all its data. Owner only."""
-    sb = _supabase()
+    sb = get_sb()
     # Check ownership
     membership = (
         sb.table("workspace_members")
@@ -273,7 +268,7 @@ async def delete_workspace(workspace_id: UUID, user_id: UUID):
 @router.delete("/{workspace_id}/leave")
 async def leave_workspace(workspace_id: UUID, user_id: UUID):
     """Leave a workspace."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("workspace_members")
         .delete()
@@ -289,7 +284,7 @@ async def leave_workspace(workspace_id: UUID, user_id: UUID):
 @router.post("/{workspace_id}/invite", response_model=WorkspaceMember)
 async def invite_member(workspace_id: UUID, body: WorkspaceInvite):
     """Invite a user to a workspace."""
-    sb = _supabase()
+    sb = get_sb()
     # Check workspace exists
     ws = sb.table("workspaces").select("id").eq("id", str(workspace_id)).execute()
     if not ws.data:
@@ -326,7 +321,7 @@ async def invite_member(workspace_id: UUID, body: WorkspaceInvite):
 @router.get("/{workspace_id}/feed", response_model=list[FeedMessage])
 async def get_feed(workspace_id: UUID, limit: int = 50, offset: int = 0):
     """Get workspace feed messages (chronological)."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("messages")
         .select("*, users(display_name), agent_profiles(agent_name)")
@@ -354,7 +349,7 @@ async def post_to_feed(
     workspace_id: UUID, user_id: UUID, body: FeedMessageCreate
 ):
     """Post a message to the workspace feed (human sender)."""
-    sb = _supabase()
+    sb = get_sb()
     data = {
         "workspace_id": str(workspace_id),
         "user_id": str(user_id),

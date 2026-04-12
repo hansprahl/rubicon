@@ -7,15 +7,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from supabase import create_client
 
-from api.config import settings
+from api.db import get_sb
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
-
-
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 class CreateFeedbackRequest(BaseModel):
@@ -42,7 +37,7 @@ async def list_feedback(
     user_id: Optional[str] = Query(None),
 ):
     """List all feedback with optional filters. sort: newest | upvotes | status"""
-    sb = _supabase()
+    sb = get_sb()
 
     query = sb.table("feedback").select("*, users(display_name)")
 
@@ -81,7 +76,7 @@ async def list_feedback(
 @router.get("/stats")
 async def get_feedback_stats():
     """Summary stats: open bugs, feature requests, etc."""
-    sb = _supabase()
+    sb = get_sb()
 
     result = sb.table("feedback").select("type, status").execute()
     rows = result.data or []
@@ -105,7 +100,7 @@ async def get_feedback_stats():
 @router.get("/{feedback_id}")
 async def get_feedback(feedback_id: UUID, user_id: Optional[str] = Query(None)):
     """Get a single feedback item."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("feedback")
         .select("*, users(display_name)")
@@ -133,7 +128,7 @@ async def get_feedback(feedback_id: UUID, user_id: Optional[str] = Query(None)):
 @router.post("")
 async def create_feedback(data: CreateFeedbackRequest, user_id: str = Query(...)):
     """Create a new feedback item."""
-    sb = _supabase()
+    sb = get_sb()
 
     if data.type not in ("bug", "feature", "improvement", "general"):
         raise HTTPException(status_code=400, detail="Invalid feedback type")
@@ -159,7 +154,7 @@ async def update_feedback(
     user_id: str = Query(...),
 ):
     """Update feedback. Owner can edit title/body; admin can change status/priority."""
-    sb = _supabase()
+    sb = get_sb()
 
     existing = (
         sb.table("feedback")
@@ -203,7 +198,7 @@ async def update_feedback(
 @router.post("/{feedback_id}/upvote")
 async def toggle_upvote(feedback_id: UUID, user_id: str = Query(...)):
     """Toggle upvote on a feedback item. Returns updated upvote count and state."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Check if already upvoted
     existing = (

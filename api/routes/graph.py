@@ -5,9 +5,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from supabase import create_client
 
-from api.config import settings
+from api.db import get_sb
 from api.models.workspace import (
     Entity,
     EntityCreate,
@@ -17,10 +16,6 @@ from api.models.workspace import (
 )
 
 router = APIRouter(prefix="/graph", tags=["graph"])
-
-
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +32,7 @@ async def create_entity(
     workspace_id: UUID, body: EntityCreate, agent_id: UUID | None = None
 ):
     """Create a shared entity in a workspace."""
-    sb = _supabase()
+    sb = get_sb()
     data = body.model_dump()
     data["workspace_id"] = str(workspace_id)
     if agent_id:
@@ -59,7 +54,7 @@ async def list_entities(
     limit: int = 100,
 ):
     """Query entities in a workspace with optional filters."""
-    sb = _supabase()
+    sb = get_sb()
     query = (
         sb.table("shared_entities")
         .select("*")
@@ -78,7 +73,7 @@ async def list_entities(
 @router.get("/entities/{entity_id}", response_model=Entity)
 async def get_entity(entity_id: UUID):
     """Get a single entity by ID."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("shared_entities").select("*").eq("id", str(entity_id)).execute()
     )
@@ -90,7 +85,7 @@ async def get_entity(entity_id: UUID):
 @router.patch("/entities/{entity_id}", response_model=Entity)
 async def update_entity(entity_id: UUID, body: EntityUpdate):
     """Update an entity."""
-    sb = _supabase()
+    sb = get_sb()
     data = body.model_dump(exclude_none=True)
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -108,7 +103,7 @@ async def update_entity(entity_id: UUID, body: EntityUpdate):
 @router.delete("/entities/{entity_id}")
 async def delete_entity(entity_id: UUID):
     """Delete an entity (cascades to relationships)."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("shared_entities").delete().eq("id", str(entity_id)).execute()
     )
@@ -129,7 +124,7 @@ async def delete_entity(entity_id: UUID):
 )
 async def create_relationship(workspace_id: UUID, body: RelationshipCreate):
     """Create a relationship between two entities."""
-    sb = _supabase()
+    sb = get_sb()
     data = body.model_dump(mode="json")
     data["workspace_id"] = str(workspace_id)
     result = sb.table("shared_relationships").insert(data).execute()
@@ -149,7 +144,7 @@ async def list_relationships(
     limit: int = 100,
 ):
     """Query relationships in a workspace."""
-    sb = _supabase()
+    sb = get_sb()
     query = (
         sb.table("shared_relationships")
         .select("*")
@@ -168,7 +163,7 @@ async def list_relationships(
 @router.delete("/relationships/{relationship_id}")
 async def delete_relationship(relationship_id: UUID):
     """Delete a relationship."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("shared_relationships")
         .delete()

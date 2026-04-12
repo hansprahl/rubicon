@@ -14,16 +14,12 @@ from __future__ import annotations
 import json
 
 import anthropic
-from supabase import create_client
 
 from api.config import settings
+from api.db import get_sb
 
 MODEL = "claude-sonnet-4-20250514"
 MAX_TOKENS = 4096
-
-
-def _sb():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 # ── Category-specific prompt templates ──
@@ -144,7 +140,7 @@ CATEGORY_TEMPLATES = {
 
 async def _fetch_workspace_context(workspace_id: str) -> str:
     """Fetch workspace data for workspace-aware tools."""
-    sb = _sb()
+    sb = get_sb()
     parts = []
 
     # Recent messages
@@ -227,7 +223,7 @@ async def execute_repo_tool(
         tool_input: The input parameters from the tool call
         agent_profile: The agent's profile dict (agent_name, expertise, values, etc.)
     """
-    sb = _sb()
+    sb = get_sb()
 
     # Look up the tool definition
     tool_result = sb.table("tool_repository").select("*").eq("name", tool_name).execute()

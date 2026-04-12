@@ -14,15 +14,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from api.config import settings
+from api.db import get_sb
 
 router = APIRouter(prefix="/north-star", tags=["north-star"])
 
 MODEL = "claude-sonnet-4-20250514"
-
-
-def _supabase():
-    from supabase import create_client
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +255,7 @@ async def _update_agent_prompt_with_soul(sb, user_id: str, north_star: dict):
 @router.get("/{user_id}")
 async def get_north_star(user_id: UUID):
     """Get a user's North Star."""
-    sb = _supabase()
+    sb = get_sb()
     result = sb.table("north_stars").select("*").eq("user_id", str(user_id)).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="No North Star found for this user")
@@ -269,7 +265,7 @@ async def get_north_star(user_id: UUID):
 @router.post("/{user_id}")
 async def save_north_star(user_id: UUID, body: NorthStarUpdate):
     """Create or update a North Star manually."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Check if user exists
     user_result = sb.table("users").select("id").eq("id", str(user_id)).execute()
@@ -305,7 +301,7 @@ async def save_north_star(user_id: UUID, body: NorthStarUpdate):
 @router.get("/{user_id}/questions")
 async def get_guided_questions(user_id: UUID):
     """Return guided questions, dynamic based on uploaded docs."""
-    sb = _supabase()
+    sb = get_sb()
     docs = _get_user_docs(sb, str(user_id))
     enrichment = _get_enrichment(sb, str(user_id))
     questions = _build_guided_questions(docs, enrichment)
@@ -315,7 +311,7 @@ async def get_guided_questions(user_id: UUID):
 @router.post("/{user_id}/guided")
 async def guided_synthesis(user_id: UUID, body: GuidedAnswers):
     """Guided North Star creation: combines doc data + answers, calls Claude to synthesize."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Get user info
     user_result = sb.table("users").select("display_name").eq("id", str(user_id)).execute()
@@ -373,7 +369,7 @@ async def guided_synthesis(user_id: UUID, body: GuidedAnswers):
 @router.delete("/{user_id}")
 async def delete_north_star(user_id: UUID):
     """Delete a user's North Star."""
-    sb = _supabase()
+    sb = get_sb()
     result = sb.table("north_stars").delete().eq("user_id", str(user_id)).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="No North Star found to delete")

@@ -6,15 +6,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from supabase import create_client
 
-from api.config import settings
+from api.db import get_sb
 
 router = APIRouter(prefix="/dm", tags=["direct-messages"])
-
-
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 class DMMessageCreate(BaseModel):
@@ -29,7 +24,7 @@ class DMMessageCreate(BaseModel):
 @router.get("/conversations")
 async def list_dm_conversations(user_id: UUID):
     """List all DM conversations for a user, newest first."""
-    sb = _supabase()
+    sb = get_sb()
     # Get conversations where user is either participant
     result = (
         sb.table("dm_conversations")
@@ -115,7 +110,7 @@ async def get_or_create_dm(user_id: UUID, other_user_id: UUID):
     if str(user_id) == str(other_user_id):
         raise HTTPException(status_code=400, detail="Cannot DM yourself")
 
-    sb = _supabase()
+    sb = get_sb()
 
     # Normalize order so unique constraint works
     p1 = min(str(user_id), str(other_user_id))
@@ -151,7 +146,7 @@ async def get_or_create_dm(user_id: UUID, other_user_id: UUID):
 @router.get("/conversations/{conversation_id}/messages")
 async def get_dm_messages(conversation_id: UUID, limit: int = 50, offset: int = 0):
     """Get messages in a DM conversation."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("dm_messages")
         .select("*")
@@ -186,7 +181,7 @@ async def get_dm_messages(conversation_id: UUID, limit: int = 50, offset: int = 
 @router.post("/conversations/{conversation_id}/messages")
 async def send_dm(conversation_id: UUID, user_id: UUID, body: DMMessageCreate):
     """Send a direct message."""
-    sb = _supabase()
+    sb = get_sb()
 
     # Verify user is a participant
     conv = (
@@ -242,7 +237,7 @@ async def send_dm(conversation_id: UUID, user_id: UUID, body: DMMessageCreate):
 @router.post("/conversations/{conversation_id}/read")
 async def mark_dm_read(conversation_id: UUID, user_id: UUID):
     """Mark all messages in a conversation as read for this user."""
-    sb = _supabase()
+    sb = get_sb()
     sb.table("dm_messages").update({
         "read_at": "now()",
     }).eq("conversation_id", str(conversation_id)).neq(

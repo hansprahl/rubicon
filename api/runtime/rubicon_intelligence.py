@@ -9,13 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from supabase import create_client
-
-from api.config import settings
-
-
-def _sb():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+from api.db import get_sb
 
 
 # ── Max active suggestions per user ──
@@ -31,7 +25,7 @@ async def generate_user_suggestions(user_id: str) -> list[dict]:
 
     Returns: [{"type": ..., "title": ..., "body": ..., "action_url": ..., "priority": int}]
     """
-    sb = _sb()
+    sb = get_sb()
     suggestions: list[dict] = []
 
     # Fetch agent profile
@@ -195,9 +189,10 @@ async def generate_user_suggestions(user_id: str) -> list[dict]:
     except Exception:
         pass  # Tool gap check is best-effort
 
+    seven_days_ago = _seven_days_ago()
+
     # ── Check 4: Trending custom agents ──
     try:
-        seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
         trending = (
             sb.table("custom_agents")
             .select("id,name,clone_count")
@@ -234,7 +229,6 @@ async def generate_user_suggestions(user_id: str) -> list[dict]:
     # ── Check 5: Inactive workspaces ──
     try:
         if workspace_ids:
-            seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
             for ws_id in workspace_ids[:5]:  # Cap at 5 workspace checks
                 recent_msgs = (
                     sb.table("messages")
@@ -265,10 +259,37 @@ async def generate_user_suggestions(user_id: str) -> list[dict]:
 # 2. COHORT DIGEST
 # ═══════════════════════════════════════════════════
 
+def _top_tools(sb, limit: int = 10) -> list[dict]:
+    """Return top tools by enabled-agent count."""
+    all_agent_tools = sb.table("agent_tools").select("tool_id").execute()
+    counts: dict[str, int] = {}
+    for at in (all_agent_tools.data or []):
+        counts[at["tool_id"]] = counts.get(at["tool_id"], 0) + 1
+    if not counts:
+        return []
+    sorted_tools = sorted(counts.items(), key=lambda x: -x[1])[:limit]
+    tool_ids = [t[0] for t in sorted_tools]
+    tool_details = sb.table("tool_repository").select("id,name,display_name").in_("id", tool_ids).execute()
+    tool_map = {t["id"]: t for t in (tool_details.data or [])}
+    result = []
+    for tid, count in sorted_tools:
+        if tid in tool_map:
+            result.append({
+                "name": tool_map[tid]["name"],
+                "display_name": tool_map[tid]["display_name"],
+                "usage_count": count,
+            })
+    return result
+
+
+def _seven_days_ago() -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+
 async def generate_cohort_digest() -> dict:
     """Generate a What's New digest for the cohort."""
-    sb = _sb()
-    seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    sb = get_sb()
+    seven_days_ago = _seven_days_ago()
 
     # New custom agents created in last 7 days
     new_agents_result = (
@@ -293,24 +314,7 @@ async def generate_cohort_digest() -> dict:
         })
 
     # Trending tools — most enabled across all agents
-    all_agent_tools = sb.table("agent_tools").select("tool_id").execute()
-    tool_usage: dict[str, int] = {}
-    for at in (all_agent_tools.data or []):
-        tool_usage[at["tool_id"]] = tool_usage.get(at["tool_id"], 0) + 1
-
-    trending_tools = []
-    if tool_usage:
-        sorted_tools = sorted(tool_usage.items(), key=lambda x: -x[1])[:10]
-        tool_ids = [t[0] for t in sorted_tools]
-        tool_details = sb.table("tool_repository").select("id,name,display_name").in_("id", tool_ids).execute()
-        tool_map = {t["id"]: t for t in (tool_details.data or [])}
-        for tid, count in sorted_tools:
-            if tid in tool_map:
-                trending_tools.append({
-                    "name": tool_map[tid]["name"],
-                    "display_name": tool_map[tid]["display_name"],
-                    "usage_count": count,
-                })
+    trending_tools = _top_tools(sb)
 
     # Active workspaces — most messages in last 7 days
     # Get all workspace messages in period
@@ -369,30 +373,13 @@ async def generate_cohort_digest() -> dict:
 
 async def get_cohort_trends() -> dict:
     """Get cohort-wide trend data."""
-    sb = _sb()
+    sb = get_sb()
 
     # Top tools by enabled count
-    all_agent_tools = sb.table("agent_tools").select("tool_id").execute()
-    tool_counts: dict[str, int] = {}
-    for at in (all_agent_tools.data or []):
-        tool_counts[at["tool_id"]] = tool_counts.get(at["tool_id"], 0) + 1
-
-    top_tools = []
-    if tool_counts:
-        sorted_tools = sorted(tool_counts.items(), key=lambda x: -x[1])[:10]
-        tool_ids = [t[0] for t in sorted_tools]
-        tool_details = sb.table("tool_repository").select("id,name,display_name").in_("id", tool_ids).execute()
-        tool_map = {t["id"]: t for t in (tool_details.data or [])}
-        for tid, count in sorted_tools:
-            if tid in tool_map:
-                top_tools.append({
-                    "name": tool_map[tid]["name"],
-                    "display_name": tool_map[tid]["display_name"],
-                    "enabled_count": count,
-                })
+    top_tools = _top_tools(sb)
 
     # Active workspaces with member counts and recent messages
-    seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    seven_days_ago = _seven_days_ago()
     workspaces = sb.table("workspaces").select("id,name").execute()
     active_workspaces = []
     for ws in (workspaces.data or []):
@@ -472,7 +459,7 @@ async def check_and_notify(user_id: str | None = None):
 
     If user_id is None, runs for all users.
     """
-    sb = _sb()
+    sb = get_sb()
 
     if user_id:
         user_ids = [user_id]

@@ -12,9 +12,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
-from supabase import create_client
-
-from api.config import settings
+from api.db import get_sb
 from api.doctrine.orchestrator import handle_chat
 from api.runtime.agent_manager import agent_manager
 
@@ -24,13 +22,9 @@ POLL_INTERVAL_SECONDS = 5
 MAX_CONCURRENT_TASKS = 3
 
 
-def _supabase():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 async def _claim_task() -> dict | None:
     """Claim the next queued task (highest priority, oldest first)."""
-    sb = _supabase()
+    sb = get_sb()
     result = (
         sb.table("agent_tasks")
         .select("*")
@@ -58,7 +52,7 @@ async def _claim_task() -> dict | None:
 
 async def _execute_task(task: dict) -> None:
     """Execute a single agent task."""
-    sb = _supabase()
+    sb = get_sb()
     task_id = task["id"]
     agent_id = task["agent_id"]
 
@@ -176,7 +170,7 @@ def _create_notification(
     metadata: dict | None = None,
 ) -> None:
     """Insert a notification row."""
-    sb = _supabase()
+    sb = get_sb()
     sb.table("notifications").insert({
         "user_id": user_id,
         "title": title,

@@ -22,6 +22,7 @@ import traceback
 from uuid import uuid4
 
 from api.config import settings
+from api.db import get_sb
 
 # ── Scoring ──
 
@@ -57,11 +58,6 @@ def _score(name: str, passed: bool, healed: bool = False, detail: str = ""):
     CHECKS.append({"name": name, "status": status, "detail": detail})
 
 
-def _sb():
-    from supabase import create_client
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
-
-
 # ═══════════════════════════════════════════════════
 # 1. DATABASE CONNECTIVITY
 # ═══════════════════════════════════════════════════
@@ -69,7 +65,7 @@ def _sb():
 def check_db_connection():
     print("\n── 1. Database Connectivity ──")
     try:
-        sb = _sb()
+        sb = get_sb()
         result = sb.table("users").select("id").limit(1).execute()
         _score("Supabase connection", True)
     except Exception as e:
@@ -79,7 +75,7 @@ def check_db_connection():
 
 
 def check_tables_exist():
-    sb = _sb()
+    sb = get_sb()
     expected_tables = [
         "users", "agent_profiles", "onboarding_docs", "workspaces",
         "workspace_members", "shared_entities", "shared_relationships",
@@ -98,7 +94,7 @@ def check_tables_exist():
 
 def check_agent_profile_columns():
     """Verify progressive onboarding columns exist."""
-    sb = _sb()
+    sb = get_sb()
     try:
         result = sb.table("agent_profiles").select("fidelity,enrichment_answers,google_services").limit(1).execute()
         _score("Progressive columns (fidelity, enrichment_answers, google_services)", True)
@@ -117,7 +113,7 @@ def check_agent_profile_columns():
 
 def check_storage_bucket():
     print("\n── 2. Storage ──")
-    sb = _sb()
+    sb = get_sb()
     try:
         buckets = sb.storage.list_buckets()
         bucket_names = [b.name if hasattr(b, 'name') else b.get('name', '') for b in buckets]
@@ -141,7 +137,7 @@ def check_storage_bucket():
 def check_template_agent():
     global TEST_USER_ID, TEST_AGENT_ID
     print("\n── 3. Template Agent (Progressive Onboarding) ──")
-    sb = _sb()
+    sb = get_sb()
 
     # Create a test user in auth
     try:
@@ -269,7 +265,7 @@ def check_incremental_upload():
         _score("Incremental upload (skipped — no test agent)", False, detail="Prerequisite failed")
         return
 
-    sb = _sb()
+    sb = get_sb()
 
     # Simulate IDP upload by inserting parsed data directly
     try:
@@ -321,7 +317,7 @@ def check_workspaces():
         _score("Workspaces (skipped)", False, detail="No test user")
         return
 
-    sb = _sb()
+    sb = get_sb()
     try:
         result = sb.table("workspaces").insert({
             "name": "Health Check Workspace",
@@ -362,7 +358,7 @@ def check_knowledge_graph():
         _score("Knowledge graph (skipped)", False, detail="No workspace or agent")
         return
 
-    sb = _sb()
+    sb = get_sb()
     entity_id = None
     try:
         result = sb.table("shared_entities").insert({
@@ -413,7 +409,7 @@ def check_approvals():
         _score("Approvals (skipped)", False, detail="No test user or agent")
         return
 
-    sb = _sb()
+    sb = get_sb()
     try:
         result = sb.table("approvals").insert({
             "user_id": TEST_USER_ID,
@@ -448,7 +444,7 @@ def check_notifications():
         _score("Notifications (skipped)", False, detail="No test user")
         return
 
-    sb = _sb()
+    sb = get_sb()
     try:
         sb.table("notifications").insert({
             "user_id": TEST_USER_ID,
@@ -476,7 +472,7 @@ def check_tool_repository():
         _score("Tool repository (skipped)", False, detail="No test agent")
         return
 
-    sb = _sb()
+    sb = get_sb()
 
     # Verify tool_repository table has 32 tools
     try:
@@ -519,7 +515,7 @@ def check_north_star():
         _score("North Star (skipped)", False, detail="No test user")
         return
 
-    sb = _sb()
+    sb = get_sb()
 
     # Create a test north star
     try:
@@ -631,7 +627,7 @@ def check_intelligence():
         _score("Intelligence (skipped)", False, detail="No test user")
         return
 
-    sb = _sb()
+    sb = get_sb()
 
     # Verify intelligence_suggestions table exists
     try:
@@ -698,7 +694,7 @@ def check_agent_repository():
         _score("Agent repository (skipped)", False, detail="No test user")
         return
 
-    sb = _sb()
+    sb = get_sb()
     test_custom_agent_id = None
 
     # Create a test custom agent
@@ -782,7 +778,7 @@ def check_feedback():
         _score("Feedback (skipped)", False, detail="No test user")
         return
 
-    sb = _sb()
+    sb = get_sb()
     test_feedback_id = None
 
     # Verify tables exist
@@ -883,7 +879,7 @@ def check_api_endpoints():
 
 def cleanup():
     print("\n── Cleanup ──")
-    sb = _sb()
+    sb = get_sb()
     cleaned = 0
 
     try:

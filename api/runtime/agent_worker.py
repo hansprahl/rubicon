@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-import anthropic
+from anthropic import AsyncAnthropic
 
 from api.config import settings
 from api.runtime.tool_executor import AGENT_TOOLS, execute_tool
@@ -18,6 +18,9 @@ from api.runtime.repo_tool_executor import execute_repo_tool
 
 # The model used for all agent interactions
 MODEL = "claude-sonnet-4-20250514"
+
+# Reuse a single async client across all ReAct loops
+_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 MAX_TOKENS = 4096
 MAX_TOOL_ROUNDS = 10  # Safety limit on ReAct iterations
 
@@ -145,7 +148,7 @@ async def run_react_loop(
     and handles tool_use responses by routing to the appropriate executor.
     Loops until Claude gives a final text response or we hit MAX_TOOL_ROUNDS.
     """
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    client = _client
 
     # Load the agent's enabled repository tools
     repo_tools = await _load_agent_repo_tools(context.agent_id)
