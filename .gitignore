@@ -12,3 +12,4 @@ dist/
 .vercel
 .DS_Store
 .build-logs/
+snapshots/
