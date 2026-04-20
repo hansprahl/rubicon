@@ -1,8 +1,24 @@
+import { createBrowserSupabaseClient } from "./supabase";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://rubicon-production-cc7d.up.railway.app/api";
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (typeof window === "undefined") return {};
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const authHeaders = await getAuthHeaders();
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: { "Content-Type": "application/json", ...authHeaders, ...options?.headers },
     ...options,
   });
   if (!res.ok) {
@@ -154,9 +170,10 @@ export async function uploadOnboardingDoc(
   const formData = new FormData();
   formData.append("file", file);
 
+  const authHeaders = await getAuthHeaders();
   const res = await fetch(
     `${API_BASE}/onboarding/upload/${userId}/${docType}`,
-    { method: "POST", body: formData }
+    { method: "POST", body: formData, headers: authHeaders }
   );
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

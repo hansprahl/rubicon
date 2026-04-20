@@ -6,8 +6,9 @@ import io
 from uuid import UUID
 
 import anthropic
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
+from api.auth import get_current_user
 from api.config import settings
 from api.db import get_sb
 from api.models.onboarding import (
@@ -27,9 +28,21 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 MODEL = "claude-sonnet-4-20250514"
 
 
+def _assert_is_caller(path_user_id: UUID, caller: str) -> None:
+    """Ensure the path user_id matches the authenticated caller.
+
+    Onboarding is always self-service — one user managing their own identity
+    docs and agent profile. Any mismatch is either a frontend bug or an attack.
+    """
+    if str(path_user_id) != caller:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot onboard another user",
+        )
+
+
 def _extract_text_from_pdf(content: bytes) -> str:
     """Extract text from PDF bytes using a simple approach."""
-    # Try PyPDF2 / pypdf first
     try:
         from pypdf import PdfReader
 
@@ -42,9 +55,6 @@ def _extract_text_from_pdf(content: bytes) -> str:
         return "\n\n".join(text_parts)
     except ImportError:
         pass
-
-    # Fallback: send raw bytes to Claude via base64 document support
-    # This works because Claude can read PDFs natively
     return ""
 
 
@@ -68,7 +78,6 @@ async def _extract_text(file_content: bytes, filename: str) -> str:
     if lower.endswith(".pdf"):
         text = _extract_text_from_pdf(file_content)
         if not text:
-            # Use Claude's native PDF reading via base64
             import base64
 
             b64 = base64.standard_b64encode(file_content).decode("utf-8")
@@ -114,15 +123,18 @@ async def _extract_text(file_content: bytes, filename: str) -> str:
 
 
 @router.post("/profile/{user_id}")
-async def setup_profile(user_id: UUID, body: OnboardingProfileRequest):
-    """Create or update the user's display name and avatar."""
+async def setup_profile(
+    user_id: UUID,
+    body: OnboardingProfileRequest,
+    current_user: str = Depends(get_current_user),
+):
+    """Create or update the caller's display name and avatar."""
+    _assert_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Get email from auth.users
     auth_user = sb.auth.admin.get_user_by_id(str(user_id))
     email = auth_user.user.email or ""
 
-    # Try update first
     result = (
         sb.table("users")
         .update({"display_name": body.display_name, "avatar_url": body.avatar_url})
@@ -130,7 +142,6 @@ async def setup_profile(user_id: UUID, body: OnboardingProfileRequest):
         .execute()
     )
 
-    # If no row existed, insert
     if not result.data:
         result = (
             sb.table("users")
@@ -159,36 +170,33 @@ async def upload_document(
     user_id: UUID,
     doc_type: str,
     file: UploadFile = File(...),
+    current_user: str = Depends(get_current_user),
 ):
     """Upload a document, store in Supabase Storage, parse with Claude."""
+    _assert_is_caller(user_id, current_user)
     if doc_type not in ("idp", "ethics", "insights"):
         raise HTTPException(status_code=400, detail=f"Invalid doc_type: {doc_type}")
 
     sb = get_sb()
     file_content = await file.read()
 
-    # Limit file size to 10MB
     max_size = 10 * 1024 * 1024
     if len(file_content) > max_size:
         raise HTTPException(status_code=413, detail="File too large. Maximum size is 10MB.")
 
     filename = file.filename or f"{doc_type}_document"
 
-    # Validate file extension
     lower = (filename or "").lower()
     if not lower.endswith((".pdf", ".docx", ".txt")):
         raise HTTPException(status_code=400, detail="Only PDF, DOCX, and TXT files are supported.")
 
-    # Upload to Supabase Storage
     storage_path = f"onboarding/{user_id}/{doc_type}/{filename}"
     sb.storage.from_("documents").upload(
         storage_path, file_content, {"content-type": file.content_type or "application/octet-stream", "upsert": "true"}
     )
 
-    # Extract text from document
     document_text = await _extract_text(file_content, filename)
 
-    # Parse with appropriate parser
     if doc_type == "idp":
         parsed = await parse_idp(document_text)
     elif doc_type == "ethics":
@@ -198,8 +206,6 @@ async def upload_document(
 
     parsed_data = parsed.model_dump()
 
-    # Upsert into onboarding_docs (replace if re-uploading)
-    # Delete existing doc for this user+type first
     sb.table("onboarding_docs").delete().eq("user_id", str(user_id)).eq(
         "doc_type", doc_type
     ).execute()
@@ -221,7 +227,6 @@ async def upload_document(
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to save document record")
 
-    # Incrementally rebuild the agent's system prompt
     await rebuild_agent_prompt(sb, str(user_id))
 
     return result.data[0]
@@ -233,8 +238,12 @@ async def upload_document(
 
 
 @router.get("/docs/{user_id}")
-async def get_onboarding_docs(user_id: UUID):
-    """Get all onboarding documents and parsed data for a user."""
+async def get_onboarding_docs(
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """Get all onboarding documents and parsed data for the caller."""
+    _assert_is_caller(user_id, current_user)
     sb = get_sb()
     result = (
         sb.table("onboarding_docs")
@@ -251,17 +260,20 @@ async def get_onboarding_docs(user_id: UUID):
 
 
 @router.post("/synthesize/{user_id}", response_model=SynthesizedProfile)
-async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
-    """Combine all parsed documents into a synthesized agent profile and create it."""
+async def synthesize_profile(
+    user_id: UUID,
+    body: OnboardingSynthesizeRequest,
+    current_user: str = Depends(get_current_user),
+):
+    """Combine all parsed documents into a synthesized agent profile."""
+    _assert_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Get user info
     user_result = sb.table("users").select("*").eq("id", str(user_id)).execute()
     if not user_result.data:
         raise HTTPException(status_code=404, detail="User not found")
     user = user_result.data[0]
 
-    # Get all parsed docs
     docs_result = (
         sb.table("onboarding_docs")
         .select("*")
@@ -274,7 +286,6 @@ async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
     ethics_data = docs_by_type.get("ethics", {})
     insights_data = docs_by_type.get("insights", {})
 
-    # Build system prompt using the progressive builder (consistent with doc re-upload path)
     system_prompt = build_progressive_prompt(
         display_name=user["display_name"],
         agent_name=body.agent_name,
@@ -284,7 +295,6 @@ async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
         enrichment_answers=body.enrichment_answers,
     )
 
-    # Build profile
     personality_data = {
         "primary_color": insights_data.get("primary_color", ""),
         "secondary_color": insights_data.get("secondary_color", ""),
@@ -307,7 +317,6 @@ async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
         "autonomy_level": body.autonomy_level,
     }
 
-    # Delete existing agent profile if re-onboarding
     sb.table("agent_profiles").delete().eq("user_id", str(user_id)).execute()
 
     result = sb.table("agent_profiles").insert(profile_data).execute()
@@ -332,11 +341,14 @@ async def synthesize_profile(user_id: UUID, body: OnboardingSynthesizeRequest):
 
 
 @router.get("/status/{user_id}")
-async def onboarding_status(user_id: UUID):
-    """Check if a user has completed onboarding."""
+async def onboarding_status(
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """Check if the caller has completed onboarding."""
+    _assert_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Check for agent profile
     agent_result = (
         sb.table("agent_profiles")
         .select("id")
@@ -345,7 +357,6 @@ async def onboarding_status(user_id: UUID):
     )
     has_profile = bool(agent_result.data)
 
-    # Check which docs are uploaded
     docs_result = (
         sb.table("onboarding_docs")
         .select("doc_type")

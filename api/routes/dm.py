@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from api.auth import get_current_user
 from api.db import get_sb
 
 router = APIRouter(prefix="/dm", tags=["direct-messages"])
@@ -16,20 +17,44 @@ class DMMessageCreate(BaseModel):
     content: str
 
 
+def _assert_matches_caller(claimed: UUID | None, caller: str) -> None:
+    if claimed is not None and str(claimed) != caller:
+        raise HTTPException(status_code=403, detail="user_id does not match authenticated caller")
+
+
+def _require_participant(sb, conversation_id: UUID, user_id: str) -> dict:
+    conv = (
+        sb.table("dm_conversations")
+        .select("*")
+        .eq("id", str(conversation_id))
+        .execute()
+    )
+    if not conv.data:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    c = conv.data[0]
+    if user_id not in (c["participant_1"], c["participant_2"]):
+        raise HTTPException(status_code=403, detail="Not a participant")
+    return c
+
+
 # ---------------------------------------------------------------------------
 # Conversations
 # ---------------------------------------------------------------------------
 
 
 @router.get("/conversations")
-async def list_dm_conversations(user_id: UUID):
-    """List all DM conversations for a user, newest first."""
+async def list_dm_conversations(
+    user_id: UUID | None = None,
+    current_user: str = Depends(get_current_user),
+):
+    """List all DM conversations for the authenticated user, newest first."""
+    _assert_matches_caller(user_id, current_user)
     sb = get_sb()
-    # Get conversations where user is either participant
+
     result = (
         sb.table("dm_conversations")
         .select("*")
-        .or_(f"participant_1.eq.{user_id},participant_2.eq.{user_id}")
+        .or_(f"participant_1.eq.{current_user},participant_2.eq.{current_user}")
         .order("updated_at", desc=True)
         .execute()
     )
@@ -57,11 +82,10 @@ async def list_dm_conversations(user_id: UUID):
     for conv in result.data or []:
         other_id = (
             conv["participant_2"]
-            if conv["participant_1"] == str(user_id)
+            if conv["participant_1"] == current_user
             else conv["participant_1"]
         )
 
-        # Last message
         last_msg = (
             sb.table("dm_messages")
             .select("content, sender_id, created_at")
@@ -71,17 +95,15 @@ async def list_dm_conversations(user_id: UUID):
             .execute()
         )
 
-        # Unread count
         unread = (
             sb.table("dm_messages")
             .select("id", count="exact")
             .eq("conversation_id", conv["id"])
-            .neq("sender_id", str(user_id))
+            .neq("sender_id", current_user)
             .is_("read_at", "null")
             .execute()
         )
 
-        # Message count
         msg_count = (
             sb.table("dm_messages")
             .select("id", count="exact")
@@ -105,18 +127,22 @@ async def list_dm_conversations(user_id: UUID):
 
 
 @router.post("/conversations")
-async def get_or_create_dm(user_id: UUID, other_user_id: UUID):
-    """Get or create a DM conversation between two users."""
-    if str(user_id) == str(other_user_id):
+async def get_or_create_dm(
+    other_user_id: UUID,
+    user_id: UUID | None = None,
+    current_user: str = Depends(get_current_user),
+):
+    """Get or create a DM conversation between the caller and another user."""
+    _assert_matches_caller(user_id, current_user)
+    if current_user == str(other_user_id):
         raise HTTPException(status_code=400, detail="Cannot DM yourself")
 
     sb = get_sb()
 
     # Normalize order so unique constraint works
-    p1 = min(str(user_id), str(other_user_id))
-    p2 = max(str(user_id), str(other_user_id))
+    p1 = min(current_user, str(other_user_id))
+    p2 = max(current_user, str(other_user_id))
 
-    # Check existing
     existing = (
         sb.table("dm_conversations")
         .select("*")
@@ -127,7 +153,6 @@ async def get_or_create_dm(user_id: UUID, other_user_id: UUID):
     if existing.data:
         return existing.data[0]
 
-    # Create new
     result = (
         sb.table("dm_conversations")
         .insert({"participant_1": p1, "participant_2": p2})
@@ -144,9 +169,16 @@ async def get_or_create_dm(user_id: UUID, other_user_id: UUID):
 
 
 @router.get("/conversations/{conversation_id}/messages")
-async def get_dm_messages(conversation_id: UUID, limit: int = 50, offset: int = 0):
-    """Get messages in a DM conversation."""
+async def get_dm_messages(
+    conversation_id: UUID,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: str = Depends(get_current_user),
+):
+    """Get messages in a DM conversation. Caller must be a participant."""
     sb = get_sb()
+    _require_participant(sb, conversation_id, current_user)
+
     result = (
         sb.table("dm_messages")
         .select("*")
@@ -156,7 +188,6 @@ async def get_dm_messages(conversation_id: UUID, limit: int = 50, offset: int = 
         .execute()
     )
 
-    # Get sender names
     sender_ids = list({m["sender_id"] for m in result.data or []})
     name_map: dict[str, str] = {}
     if sender_ids:
@@ -179,30 +210,22 @@ async def get_dm_messages(conversation_id: UUID, limit: int = 50, offset: int = 
 
 
 @router.post("/conversations/{conversation_id}/messages")
-async def send_dm(conversation_id: UUID, user_id: UUID, body: DMMessageCreate):
-    """Send a direct message."""
+async def send_dm(
+    conversation_id: UUID,
+    body: DMMessageCreate,
+    user_id: UUID | None = None,
+    current_user: str = Depends(get_current_user),
+):
+    """Send a direct message. Caller must be a participant."""
+    _assert_matches_caller(user_id, current_user)
     sb = get_sb()
+    c = _require_participant(sb, conversation_id, current_user)
 
-    # Verify user is a participant
-    conv = (
-        sb.table("dm_conversations")
-        .select("*")
-        .eq("id", str(conversation_id))
-        .execute()
-    )
-    if not conv.data:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-
-    c = conv.data[0]
-    if str(user_id) not in (c["participant_1"], c["participant_2"]):
-        raise HTTPException(status_code=403, detail="Not a participant")
-
-    # Insert message
     result = (
         sb.table("dm_messages")
         .insert({
             "conversation_id": str(conversation_id),
-            "sender_id": str(user_id),
+            "sender_id": current_user,
             "content": body.content,
         })
         .execute()
@@ -210,14 +233,12 @@ async def send_dm(conversation_id: UUID, user_id: UUID, body: DMMessageCreate):
     if not result.data:
         raise HTTPException(status_code=400, detail="Failed to send message")
 
-    # Update conversation timestamp
     sb.table("dm_conversations").update({
         "updated_at": result.data[0]["created_at"],
     }).eq("id", str(conversation_id)).execute()
 
-    # Create notification for the other user
-    other_id = c["participant_2"] if c["participant_1"] == str(user_id) else c["participant_1"]
-    sender_name_result = sb.table("users").select("display_name").eq("id", str(user_id)).execute()
+    other_id = c["participant_2"] if c["participant_1"] == current_user else c["participant_1"]
+    sender_name_result = sb.table("users").select("display_name").eq("id", current_user).execute()
     sender_name = sender_name_result.data[0]["display_name"] if sender_name_result.data else "Someone"
 
     try:
@@ -235,13 +256,20 @@ async def send_dm(conversation_id: UUID, user_id: UUID, body: DMMessageCreate):
 
 
 @router.post("/conversations/{conversation_id}/read")
-async def mark_dm_read(conversation_id: UUID, user_id: UUID):
-    """Mark all messages in a conversation as read for this user."""
+async def mark_dm_read(
+    conversation_id: UUID,
+    user_id: UUID | None = None,
+    current_user: str = Depends(get_current_user),
+):
+    """Mark all messages in a conversation as read for the caller."""
+    _assert_matches_caller(user_id, current_user)
     sb = get_sb()
+    _require_participant(sb, conversation_id, current_user)
+
     sb.table("dm_messages").update({
         "read_at": "now()",
     }).eq("conversation_id", str(conversation_id)).neq(
-        "sender_id", str(user_id)
+        "sender_id", current_user
     ).is_("read_at", "null").execute()
 
     return {"status": "ok"}
