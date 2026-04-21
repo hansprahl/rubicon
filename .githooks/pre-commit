@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block commits that contain secrets.
+# Scans staged changes with gitleaks. Bypass with --no-verify (not recommended).
+
+set -e
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+Warning: gitleaks is not installed — staged changes were NOT scanned for secrets.
+Install it with:   brew install gitleaks
+Commit proceeding without scan.
+EOF
+    exit 0
+fi
+
+if ! gitleaks git --staged --no-banner --redact; then
+    cat >&2 <<'EOF'
+
+Commit blocked: gitleaks detected potential secrets in staged changes.
+
+What to do:
+  1. Review the findings above (values are redacted).
+  2. Remove the secret from the staged file. Move it to .env and reference
+     via os.environ or similar.
+  3. Make sure .env is in .gitignore.
+  4. Re-stage and commit.
+
+If this is a genuine false positive, add it to .gitleaksignore
+(format: fingerprint per line, copy from the finding output).
+
+To bypass this hook once, use:   git commit --no-verify
+(Only do this if you are CERTAIN there are no secrets. Unauthorized bypass
+defeats the purpose.)
+EOF
+    exit 1
+fi
