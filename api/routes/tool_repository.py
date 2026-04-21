@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from api.auth import get_current_user, require_agent_owner
 from api.db import get_sb
 
 router = APIRouter(prefix="/tools", tags=["tools"])
@@ -19,8 +20,11 @@ class BulkEnableRequest(BaseModel):
 # -- Endpoints --
 
 @router.get("")
-async def list_tools(category: str | None = None):
-    """List all tools in the repository, optionally filtered by category."""
+async def list_tools(
+    category: str | None = None,
+    current_user: str = Depends(get_current_user),
+):
+    """List all tools in the repository. Any authenticated cohort member."""
     sb = get_sb()
     query = sb.table("tool_repository").select("*").order("category").order("name")
     if category:
@@ -30,7 +34,7 @@ async def list_tools(category: str | None = None):
 
 
 @router.get("/categories")
-async def list_categories():
+async def list_categories(current_user: str = Depends(get_current_user)):
     """List all categories with tool counts."""
     sb = get_sb()
     result = sb.table("tool_repository").select("category").execute()
@@ -42,7 +46,10 @@ async def list_categories():
 
 
 @router.get("/{tool_id}")
-async def get_tool(tool_id: str):
+async def get_tool(
+    tool_id: str,
+    current_user: str = Depends(get_current_user),
+):
     """Get a single tool's details."""
     sb = get_sb()
     result = sb.table("tool_repository").select("*").eq("id", tool_id).execute()
@@ -52,10 +59,13 @@ async def get_tool(tool_id: str):
 
 
 @router.get("/agent/{agent_id}")
-async def get_agent_tools(agent_id: str):
-    """List tools enabled for a specific agent."""
+async def get_agent_tools(
+    agent_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """List tools enabled for an agent. Owner only."""
     sb = get_sb()
-    # Join through agent_tools to get full tool data
+    require_agent_owner(sb, agent_id, current_user)
     enabled = (
         sb.table("agent_tools")
         .select("tool_id,enabled_at")
@@ -75,7 +85,6 @@ async def get_agent_tools(agent_id: str):
         .execute()
     )
 
-    # Add enabled_at to each tool
     result = []
     for tool in (tools.data or []):
         tool["enabled_at"] = enabled_map.get(tool["id"])
@@ -85,21 +94,19 @@ async def get_agent_tools(agent_id: str):
 
 
 @router.post("/agent/{agent_id}/{tool_id}")
-async def enable_tool(agent_id: str, tool_id: str):
-    """Enable a tool for an agent."""
+async def enable_tool(
+    agent_id: str,
+    tool_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """Enable a tool for an agent. Owner only."""
     sb = get_sb()
+    require_agent_owner(sb, agent_id, current_user)
 
-    # Verify agent exists
-    agent = sb.table("agent_profiles").select("id").eq("id", agent_id).execute()
-    if not agent.data:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    # Verify tool exists
     tool = sb.table("tool_repository").select("id").eq("id", tool_id).execute()
     if not tool.data:
         raise HTTPException(status_code=404, detail="Tool not found")
 
-    # Upsert (idempotent enable)
     sb.table("agent_tools").upsert({
         "agent_id": agent_id,
         "tool_id": tool_id,
@@ -109,34 +116,35 @@ async def enable_tool(agent_id: str, tool_id: str):
 
 
 @router.delete("/agent/{agent_id}/{tool_id}")
-async def disable_tool(agent_id: str, tool_id: str):
-    """Disable a tool for an agent."""
+async def disable_tool(
+    agent_id: str,
+    tool_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """Disable a tool for an agent. Owner only."""
     sb = get_sb()
+    require_agent_owner(sb, agent_id, current_user)
     sb.table("agent_tools").delete().eq("agent_id", agent_id).eq("tool_id", tool_id).execute()
     return {"status": "disabled"}
 
 
 @router.post("/agent/{agent_id}/bulk")
-async def bulk_enable_tools(agent_id: str, body: BulkEnableRequest):
-    """Enable multiple tools at once for an agent."""
+async def bulk_enable_tools(
+    agent_id: str,
+    body: BulkEnableRequest,
+    current_user: str = Depends(get_current_user),
+):
+    """Enable multiple tools at once for an agent. Owner only."""
     sb = get_sb()
+    require_agent_owner(sb, agent_id, current_user)
 
-    # Verify agent exists
-    agent = sb.table("agent_profiles").select("id").eq("id", agent_id).execute()
-    if not agent.data:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    # Verify all tools exist
     tools = sb.table("tool_repository").select("id").in_("id", body.tool_ids).execute()
     found_ids = {t["id"] for t in (tools.data or [])}
     missing = set(body.tool_ids) - found_ids
     if missing:
         raise HTTPException(status_code=404, detail=f"Tools not found: {missing}")
 
-    # Upsert all
     rows = [{"agent_id": agent_id, "tool_id": tid} for tid in body.tool_ids]
     sb.table("agent_tools").upsert(rows).execute()
 
     return {"status": "enabled", "count": len(body.tool_ids)}
-
-

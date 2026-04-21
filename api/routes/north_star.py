@@ -10,9 +10,10 @@ import json
 from uuid import UUID
 
 import anthropic
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from api.auth import assert_is_caller, get_current_user
 from api.config import settings
 from api.db import get_sb
 
@@ -41,13 +42,11 @@ class GuidedAnswers(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _get_user_docs(sb, user_id: str) -> dict[str, dict]:
-    """Fetch parsed onboarding doc data keyed by doc_type."""
     result = sb.table("onboarding_docs").select("doc_type,parsed_data").eq("user_id", user_id).execute()
     return {d["doc_type"]: d["parsed_data"] for d in (result.data or [])}
 
 
 def _get_enrichment(sb, user_id: str) -> dict:
-    """Fetch enrichment answers from agent_profiles."""
     result = sb.table("agent_profiles").select("enrichment_answers").eq("user_id", user_id).execute()
     if result.data and result.data[0].get("enrichment_answers"):
         return result.data[0]["enrichment_answers"]
@@ -55,7 +54,6 @@ def _get_enrichment(sb, user_id: str) -> dict:
 
 
 def _build_guided_questions(docs: dict[str, dict], enrichment: dict) -> list[dict]:
-    """Build dynamic guided questions based on what docs exist."""
     questions = [
         {
             "id": "stand_for",
@@ -84,7 +82,6 @@ def _build_guided_questions(docs: dict[str, dict], enrichment: dict) -> list[dic
         },
     ]
 
-    # Dynamic questions based on uploaded docs
     idp = docs.get("idp", {}) or {}
     ethics = docs.get("ethics", {}) or {}
     insights = docs.get("insights", {}) or {}
@@ -139,10 +136,8 @@ async def _synthesize_north_star(
     enrichment: dict,
     answers: dict[str, str],
 ) -> dict:
-    """Call Claude to synthesize a North Star from docs + answers."""
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
-    # Build context from docs
     doc_context = ""
     idp = docs.get("idp", {}) or {}
     ethics = docs.get("ethics", {}) or {}
@@ -186,7 +181,6 @@ Blind spot: {enrichment.get('blind_spot', '')}
 North star vision: {enrichment.get('north_star', '')}
 """
 
-    # Build answers section
     answer_lines = []
     for qid, answer in answers.items():
         if answer and answer.strip():
@@ -232,7 +226,6 @@ Return ONLY the JSON. No commentary, no markdown fences."""
     )
 
     text = response.content[0].text.strip()
-    # Strip markdown fences if Claude added them anyway
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text[3:]
     if text.endswith("```"):
@@ -243,7 +236,6 @@ Return ONLY the JSON. No commentary, no markdown fences."""
 
 
 async def _update_agent_prompt_with_soul(sb, user_id: str, north_star: dict):
-    """Rebuild the agent's system prompt to include the North Star as the Soul."""
     from api.services.prompt_service import rebuild_agent_prompt
     await rebuild_agent_prompt(sb, user_id)
 
@@ -253,27 +245,35 @@ async def _update_agent_prompt_with_soul(sb, user_id: str, north_star: dict):
 # ---------------------------------------------------------------------------
 
 @router.get("/{user_id}")
-async def get_north_star(user_id: UUID):
-    """Get a user's North Star."""
+async def get_north_star(
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """Get the caller's North Star."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
-    result = sb.table("north_stars").select("*").eq("user_id", str(user_id)).execute()
+    result = sb.table("north_stars").select("*").eq("user_id", current_user).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="No North Star found for this user")
     return result.data[0]
 
 
 @router.post("/{user_id}")
-async def save_north_star(user_id: UUID, body: NorthStarUpdate):
-    """Create or update a North Star manually."""
+async def save_north_star(
+    user_id: UUID,
+    body: NorthStarUpdate,
+    current_user: str = Depends(get_current_user),
+):
+    """Create or update the caller's North Star."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Check if user exists
-    user_result = sb.table("users").select("id").eq("id", str(user_id)).execute()
+    user_result = sb.table("users").select("id").eq("id", current_user).execute()
     if not user_result.data:
         raise HTTPException(status_code=404, detail="User not found")
 
     data = {
-        "user_id": str(user_id),
+        "user_id": current_user,
         "mission": body.mission,
         "principles": body.principles,
         "vision": body.vision,
@@ -282,48 +282,52 @@ async def save_north_star(user_id: UUID, body: NorthStarUpdate):
         "updated_at": "now()",
     }
 
-    # Try update first
-    existing = sb.table("north_stars").select("id").eq("user_id", str(user_id)).execute()
+    existing = sb.table("north_stars").select("id").eq("user_id", current_user).execute()
     if existing.data:
-        result = sb.table("north_stars").update(data).eq("user_id", str(user_id)).execute()
+        result = sb.table("north_stars").update(data).eq("user_id", current_user).execute()
     else:
         result = sb.table("north_stars").insert(data).execute()
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to save North Star")
 
-    # Rebuild agent prompt with soul
-    await _update_agent_prompt_with_soul(sb, str(user_id), result.data[0])
+    await _update_agent_prompt_with_soul(sb, current_user, result.data[0])
 
     return result.data[0]
 
 
 @router.get("/{user_id}/questions")
-async def get_guided_questions(user_id: UUID):
-    """Return guided questions, dynamic based on uploaded docs."""
+async def get_guided_questions(
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """Return guided questions, dynamic based on caller's uploaded docs."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
-    docs = _get_user_docs(sb, str(user_id))
-    enrichment = _get_enrichment(sb, str(user_id))
+    docs = _get_user_docs(sb, current_user)
+    enrichment = _get_enrichment(sb, current_user)
     questions = _build_guided_questions(docs, enrichment)
     return {"questions": questions}
 
 
 @router.post("/{user_id}/guided")
-async def guided_synthesis(user_id: UUID, body: GuidedAnswers):
-    """Guided North Star creation: combines doc data + answers, calls Claude to synthesize."""
+async def guided_synthesis(
+    user_id: UUID,
+    body: GuidedAnswers,
+    current_user: str = Depends(get_current_user),
+):
+    """Guided North Star creation for the caller."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Get user info
-    user_result = sb.table("users").select("display_name").eq("id", str(user_id)).execute()
+    user_result = sb.table("users").select("display_name").eq("id", current_user).execute()
     if not user_result.data:
         raise HTTPException(status_code=404, detail="User not found")
     display_name = user_result.data[0]["display_name"]
 
-    # Gather all source data
-    docs = _get_user_docs(sb, str(user_id))
-    enrichment = _get_enrichment(sb, str(user_id))
+    docs = _get_user_docs(sb, current_user)
+    enrichment = _get_enrichment(sb, current_user)
 
-    # Synthesize with Claude
     synthesized = await _synthesize_north_star(
         display_name=display_name,
         docs=docs,
@@ -331,7 +335,6 @@ async def guided_synthesis(user_id: UUID, body: GuidedAnswers):
         answers=body.answers,
     )
 
-    # Track which sources contributed
     synthesis_source = {
         "idp": "idp" in docs,
         "ethics": "ethics" in docs,
@@ -340,9 +343,8 @@ async def guided_synthesis(user_id: UUID, body: GuidedAnswers):
         "guided_answers": True,
     }
 
-    # Save to DB
     data = {
-        "user_id": str(user_id),
+        "user_id": current_user,
         "mission": synthesized["mission"],
         "principles": synthesized.get("principles", []),
         "vision": synthesized.get("vision"),
@@ -351,30 +353,32 @@ async def guided_synthesis(user_id: UUID, body: GuidedAnswers):
         "updated_at": "now()",
     }
 
-    existing = sb.table("north_stars").select("id").eq("user_id", str(user_id)).execute()
+    existing = sb.table("north_stars").select("id").eq("user_id", current_user).execute()
     if existing.data:
-        result = sb.table("north_stars").update(data).eq("user_id", str(user_id)).execute()
+        result = sb.table("north_stars").update(data).eq("user_id", current_user).execute()
     else:
         result = sb.table("north_stars").insert(data).execute()
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to save synthesized North Star")
 
-    # Rebuild agent prompt with soul
-    await _update_agent_prompt_with_soul(sb, str(user_id), result.data[0])
+    await _update_agent_prompt_with_soul(sb, current_user, result.data[0])
 
     return result.data[0]
 
 
 @router.delete("/{user_id}")
-async def delete_north_star(user_id: UUID):
-    """Delete a user's North Star."""
+async def delete_north_star(
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """Delete the caller's North Star."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
-    result = sb.table("north_stars").delete().eq("user_id", str(user_id)).execute()
+    result = sb.table("north_stars").delete().eq("user_id", current_user).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="No North Star found to delete")
 
-    # Rebuild prompt without soul
-    await _update_agent_prompt_with_soul(sb, str(user_id), {})
+    await _update_agent_prompt_with_soul(sb, current_user, {})
 
     return {"status": "deleted"}

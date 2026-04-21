@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.auth import assert_is_caller, get_current_user
 from api.db import get_sb
-from api.runtime.anatomy import get_anatomy, get_heartbeat_status
+from api.runtime.anatomy import get_anatomy, get_heartbeat_status  # noqa: F401
 
 router = APIRouter(prefix="/anatomy", tags=["anatomy"])
 
@@ -43,37 +44,44 @@ def _serialize_anatomy(anatomy):
 
 
 @router.get("/{user_id}")
-async def get_user_anatomy(user_id: UUID):
-    """Get full anatomy for a user's agent."""
+async def get_user_anatomy(
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """Get full anatomy for the caller's agent."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Look up agent for this user
-    result = sb.table("agent_profiles").select("id").eq("user_id", str(user_id)).execute()
+    result = sb.table("agent_profiles").select("id").eq("user_id", current_user).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="No agent found for this user")
 
     agent_id = result.data[0]["id"]
 
     try:
-        anatomy = await get_anatomy(str(user_id), agent_id)
+        anatomy = await get_anatomy(current_user, agent_id)
         return _serialize_anatomy(anatomy)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/{user_id}/heartbeat")
-async def get_user_heartbeat(user_id: UUID):
+async def get_user_heartbeat(
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
     """Quick health check — just the heartbeat."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
 
-    result = sb.table("agent_profiles").select("id").eq("user_id", str(user_id)).execute()
+    result = sb.table("agent_profiles").select("id").eq("user_id", current_user).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="No agent found for this user")
 
     agent_id = result.data[0]["id"]
 
     try:
-        anatomy = await get_anatomy(str(user_id), agent_id)
+        anatomy = await get_anatomy(current_user, agent_id)
         return {
             "heartbeat": {
                 "status": anatomy.heartbeat.status,

@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.auth import (
+    get_current_user,
+    require_agent_owner,
+    require_workspace_member,
+)
 from api.db import get_sb
 from api.models.milestone import (
     AgentTask,
@@ -19,6 +24,36 @@ from api.models.milestone import (
 router = APIRouter(prefix="/milestones", tags=["milestones"])
 
 
+def _require_milestone_access(sb, milestone_id: str, user_id: str) -> dict:
+    """Fetch milestone and verify caller is a member of its workspace."""
+    result = sb.table("milestones").select("*").eq("id", milestone_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    require_workspace_member(sb, result.data[0]["workspace_id"], user_id)
+    return result.data[0]
+
+
+def _require_task_access(sb, task_id: str, user_id: str) -> dict:
+    """Fetch agent task and verify caller owns the agent OR is a workspace member."""
+    result = sb.table("agent_tasks").select("*").eq("id", task_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task = result.data[0]
+    # Owner of the agent can always act. Otherwise must be a workspace member.
+    agent_result = (
+        sb.table("agent_profiles")
+        .select("user_id")
+        .eq("id", task["agent_id"])
+        .execute()
+    )
+    if agent_result.data and agent_result.data[0]["user_id"] == user_id:
+        return task
+    if task.get("workspace_id"):
+        require_workspace_member(sb, task["workspace_id"], user_id)
+        return task
+    raise HTTPException(status_code=403, detail="Not your task")
+
+
 # ---------------------------------------------------------------------------
 # Milestones
 # ---------------------------------------------------------------------------
@@ -29,8 +64,13 @@ router = APIRouter(prefix="/milestones", tags=["milestones"])
     response_model=Milestone,
     status_code=201,
 )
-async def create_milestone(workspace_id: UUID, body: MilestoneCreate):
+async def create_milestone(
+    workspace_id: UUID,
+    body: MilestoneCreate,
+    current_user: str = Depends(get_current_user),
+):
     sb = get_sb()
+    require_workspace_member(sb, str(workspace_id), current_user)
     data = body.model_dump(mode="json")
     data["workspace_id"] = str(workspace_id)
     result = sb.table("milestones").insert(data).execute()
@@ -47,8 +87,10 @@ async def list_milestones(
     workspace_id: UUID,
     status: str | None = None,
     limit: int = 50,
+    current_user: str = Depends(get_current_user),
 ):
     sb = get_sb()
+    require_workspace_member(sb, str(workspace_id), current_user)
     query = (
         sb.table("milestones")
         .select("*")
@@ -61,19 +103,22 @@ async def list_milestones(
 
 
 @router.get("/{milestone_id}", response_model=Milestone)
-async def get_milestone(milestone_id: UUID):
+async def get_milestone(
+    milestone_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
     sb = get_sb()
-    result = (
-        sb.table("milestones").select("*").eq("id", str(milestone_id)).execute()
-    )
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Milestone not found")
-    return result.data[0]
+    return _require_milestone_access(sb, str(milestone_id), current_user)
 
 
 @router.patch("/{milestone_id}", response_model=Milestone)
-async def update_milestone(milestone_id: UUID, body: MilestoneUpdate):
+async def update_milestone(
+    milestone_id: UUID,
+    body: MilestoneUpdate,
+    current_user: str = Depends(get_current_user),
+):
     sb = get_sb()
+    _require_milestone_access(sb, str(milestone_id), current_user)
     data = body.model_dump(exclude_none=True, mode="json")
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -89,8 +134,12 @@ async def update_milestone(milestone_id: UUID, body: MilestoneUpdate):
 
 
 @router.delete("/{milestone_id}")
-async def delete_milestone(milestone_id: UUID):
+async def delete_milestone(
+    milestone_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
     sb = get_sb()
+    _require_milestone_access(sb, str(milestone_id), current_user)
     result = (
         sb.table("milestones").delete().eq("id", str(milestone_id)).execute()
     )
@@ -109,8 +158,14 @@ async def delete_milestone(milestone_id: UUID):
     response_model=AgentTask,
     status_code=201,
 )
-async def create_task(agent_id: UUID, body: AgentTaskCreate):
+async def create_task(
+    agent_id: UUID,
+    body: AgentTaskCreate,
+    current_user: str = Depends(get_current_user),
+):
+    """Create a task for an agent. Caller must own the agent."""
     sb = get_sb()
+    require_agent_owner(sb, str(agent_id), current_user)
     data = body.model_dump(mode="json")
     data["agent_id"] = str(agent_id)
     result = sb.table("agent_tasks").insert(data).execute()
@@ -127,8 +182,10 @@ async def list_workspace_tasks(
     workspace_id: UUID,
     status: str | None = None,
     limit: int = 100,
+    current_user: str = Depends(get_current_user),
 ):
     sb = get_sb()
+    require_workspace_member(sb, str(workspace_id), current_user)
     query = (
         sb.table("agent_tasks")
         .select("*")
@@ -141,8 +198,14 @@ async def list_workspace_tasks(
 
 
 @router.patch("/tasks/{task_id}", response_model=AgentTask)
-async def update_task(task_id: UUID, body: AgentTaskUpdate):
+async def update_task(
+    task_id: UUID,
+    body: AgentTaskUpdate,
+    current_user: str = Depends(get_current_user),
+):
+    """Update a task. Agent owner OR workspace member may update."""
     sb = get_sb()
+    _require_task_access(sb, str(task_id), current_user)
     data = body.model_dump(exclude_none=True, mode="json")
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -155,5 +218,3 @@ async def update_task(task_id: UUID, body: AgentTaskUpdate):
     if not result.data:
         raise HTTPException(status_code=404, detail="Task not found")
     return result.data[0]
-
-

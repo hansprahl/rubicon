@@ -5,9 +5,10 @@ from __future__ import annotations
 from uuid import UUID
 
 from anthropic import AsyncAnthropic
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from api.auth import get_current_user
 from api.config import settings
 from api.db import get_sb
 
@@ -63,6 +64,14 @@ class RateAgentRequest(BaseModel):
 
 
 # ── Helpers ──
+
+
+def _assert_user_is_caller(user_id: str, current_user: str) -> None:
+    if user_id != current_user:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot act on behalf of another user",
+        )
 
 
 def _get_creator_context(sb, user_id: str) -> str:
@@ -147,11 +156,9 @@ Keep the prompt under 800 words. Write ONLY the system prompt text, no preamble 
 def _notify_cohort(sb, agent_id: str, agent_name: str, description: str, creator_id: str):
     """Send a What's New notification to all cohort members."""
     try:
-        # Get creator's display name
         creator = sb.table("users").select("display_name").eq("id", creator_id).execute()
         creator_name = creator.data[0]["display_name"] if creator.data else "A cohort member"
 
-        # Get all user IDs except the creator
         users = sb.table("users").select("id").neq("id", creator_id).execute()
         if not users.data:
             return
@@ -167,10 +174,8 @@ def _notify_cohort(sb, agent_id: str, agent_name: str, description: str, creator
             for u in users.data
         ]
 
-        # Batch insert notifications
         sb.table("notifications").insert(notifications).execute()
     except Exception:
-        # Don't fail the agent creation if notifications fail
         pass
 
 
@@ -184,12 +189,14 @@ async def list_agents(
     search: str | None = None,
     sort: str = "newest",
     user_id: str | None = None,
+    current_user: str = Depends(get_current_user),
 ):
     """List custom agents with filtering and sorting."""
+    if user_id is not None:
+        _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
     query = sb.table("custom_agents").select("*, users!custom_agents_created_by_fkey(display_name)")
 
-    # Only show active agents by default
     query = query.eq("status", "active")
 
     if category:
@@ -201,17 +208,15 @@ async def list_agents(
     if search:
         query = query.or_(f"name.ilike.%{search}%,description.ilike.%{search}%,purpose.ilike.%{search}%")
 
-    # Sorting
     if sort == "newest":
         query = query.order("created_at", desc=True)
     elif sort == "most_cloned":
         query = query.order("clone_count", desc=True)
     elif sort == "highest_rated":
-        query = query.order("rating_sum", desc=True)  # Rough proxy; real avg computed client-side
+        query = query.order("rating_sum", desc=True)
 
     result = query.execute()
 
-    # Enrich with creator display name
     agents = []
     for row in (result.data or []):
         users_data = row.pop("users", None)
@@ -222,7 +227,7 @@ async def list_agents(
 
 
 @router.get("/categories")
-async def list_categories():
+async def list_categories(current_user: str = Depends(get_current_user)):
     """List categories with counts."""
     sb = get_sb()
     result = sb.table("custom_agents").select("category").eq("status", "active").execute()
@@ -234,13 +239,17 @@ async def list_categories():
 
 
 @router.get("/my-agents")
-async def my_agents(user_id: str):
-    """List agents created by the current user (all statuses)."""
+async def my_agents(
+    user_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """List agents created by the caller (all statuses)."""
+    _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
     result = (
         sb.table("custom_agents")
         .select("*")
-        .eq("created_by", user_id)
+        .eq("created_by", current_user)
         .order("created_at", desc=True)
         .execute()
     )
@@ -248,14 +257,17 @@ async def my_agents(user_id: str):
 
 
 @router.get("/my-enabled")
-async def my_enabled_agents(user_id: str):
-    """List agents the user has enabled/cloned."""
+async def my_enabled_agents(
+    user_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """List agents the caller has enabled/cloned."""
+    _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
-    # Get the junction table entries
     enabled = (
         sb.table("user_custom_agents")
         .select("custom_agent_id,enabled_at")
-        .eq("user_id", user_id)
+        .eq("user_id", current_user)
         .execute()
     )
     if not enabled.data:
@@ -282,7 +294,10 @@ async def my_enabled_agents(user_id: str):
 
 
 @router.get("/{agent_id}")
-async def get_agent(agent_id: str):
+async def get_agent(
+    agent_id: str,
+    current_user: str = Depends(get_current_user),
+):
     """Get a single custom agent with full details."""
     sb = get_sb()
     result = (
@@ -298,7 +313,6 @@ async def get_agent(agent_id: str):
     users_data = agent.pop("users", None)
     agent["creator_name"] = users_data.get("display_name", "Unknown") if users_data else "Unknown"
 
-    # Get ratings
     ratings = (
         sb.table("agent_ratings")
         .select("*, users!agent_ratings_user_id_fkey(display_name)")
@@ -318,14 +332,17 @@ async def get_agent(agent_id: str):
 
 
 @router.post("")
-async def create_agent(body: CreateAgentRequest, user_id: str):
+async def create_agent(
+    body: CreateAgentRequest,
+    user_id: str,
+    current_user: str = Depends(get_current_user),
+):
     """Create a new custom agent."""
+    _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Get creator context for prompt personalization
-    creator_context = _get_creator_context(sb, user_id)
+    creator_context = _get_creator_context(sb, current_user)
 
-    # Synthesize system prompt using Claude
     system_prompt = await _synthesize_system_prompt(
         name=body.name,
         purpose=body.purpose,
@@ -336,9 +353,8 @@ async def create_agent(body: CreateAgentRequest, user_id: str):
         creator_context=creator_context,
     )
 
-    # Insert the agent
     row = {
-        "created_by": user_id,
+        "created_by": current_user,
         "name": body.name,
         "description": body.description,
         "purpose": body.purpose,
@@ -358,22 +374,24 @@ async def create_agent(body: CreateAgentRequest, user_id: str):
 
     agent = result.data[0]
 
-    # Send What's New notification if cohort-visible
     if body.visibility == "cohort":
-        _notify_cohort(sb, agent["id"], body.name, body.description, user_id)
+        _notify_cohort(sb, agent["id"], body.name, body.description, current_user)
 
     return agent
 
 
 @router.post("/build")
-async def build_agent(body: BuildAgentRequest, user_id: str):
+async def build_agent(
+    body: BuildAgentRequest,
+    user_id: str,
+    current_user: str = Depends(get_current_user),
+):
     """Guided builder endpoint — synthesizes description + system prompt from wizard data."""
+    _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Get creator context
-    creator_context = _get_creator_context(sb, user_id)
+    creator_context = _get_creator_context(sb, current_user)
 
-    # Generate description from purpose
     client = AsyncAnthropic(api_key=settings.anthropic_api_key)
     desc_response = await client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -385,13 +403,11 @@ async def build_agent(body: BuildAgentRequest, user_id: str):
     )
     description = desc_response.content[0].text.strip()
 
-    # Map doctrine_config to doctrine_components format
     doctrine_components = {}
     for key in ("confidence_scoring", "knowledge_graph", "approval_required", "proactive"):
         if body.doctrine_config.get(key):
             doctrine_components[key] = True
 
-    # Synthesize system prompt
     system_prompt = await _synthesize_system_prompt(
         name=body.name,
         purpose=body.purpose,
@@ -402,9 +418,8 @@ async def build_agent(body: BuildAgentRequest, user_id: str):
         creator_context=creator_context,
     )
 
-    # Insert
     row = {
-        "created_by": user_id,
+        "created_by": current_user,
         "name": body.name,
         "description": description,
         "purpose": body.purpose,
@@ -424,23 +439,27 @@ async def build_agent(body: BuildAgentRequest, user_id: str):
 
     agent = result.data[0]
 
-    # What's New notifications
     if body.visibility == "cohort":
-        _notify_cohort(sb, agent["id"], body.name, description, user_id)
+        _notify_cohort(sb, agent["id"], body.name, description, current_user)
 
     return agent
 
 
 @router.patch("/{agent_id}")
-async def update_agent(agent_id: str, body: UpdateAgentRequest, user_id: str):
+async def update_agent(
+    agent_id: str,
+    body: UpdateAgentRequest,
+    user_id: str,
+    current_user: str = Depends(get_current_user),
+):
     """Update a custom agent (owner only)."""
+    _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Verify ownership
     existing = sb.table("custom_agents").select("created_by").eq("id", agent_id).execute()
     if not existing.data:
         raise HTTPException(status_code=404, detail="Custom agent not found")
-    if existing.data[0]["created_by"] != user_id:
+    if existing.data[0]["created_by"] != current_user:
         raise HTTPException(status_code=403, detail="Only the creator can update this agent")
 
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -456,14 +475,19 @@ async def update_agent(agent_id: str, body: UpdateAgentRequest, user_id: str):
 
 
 @router.delete("/{agent_id}")
-async def delete_agent(agent_id: str, user_id: str):
+async def delete_agent(
+    agent_id: str,
+    user_id: str,
+    current_user: str = Depends(get_current_user),
+):
     """Archive a custom agent (owner only). Soft delete via status change."""
+    _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
 
     existing = sb.table("custom_agents").select("created_by").eq("id", agent_id).execute()
     if not existing.data:
         raise HTTPException(status_code=404, detail="Custom agent not found")
-    if existing.data[0]["created_by"] != user_id:
+    if existing.data[0]["created_by"] != current_user:
         raise HTTPException(status_code=403, detail="Only the creator can archive this agent")
 
     sb.table("custom_agents").update({"status": "archived", "updated_at": "now()"}).eq("id", agent_id).execute()
@@ -471,22 +495,24 @@ async def delete_agent(agent_id: str, user_id: str):
 
 
 @router.post("/{agent_id}/clone")
-async def clone_agent(agent_id: str, user_id: str):
-    """Enable/clone a custom agent for your account."""
+async def clone_agent(
+    agent_id: str,
+    user_id: str,
+    current_user: str = Depends(get_current_user),
+):
+    """Enable/clone a custom agent for the caller."""
+    _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
 
-    # Verify agent exists and is active
     agent = sb.table("custom_agents").select("id,name,clone_count").eq("id", agent_id).eq("status", "active").execute()
     if not agent.data:
         raise HTTPException(status_code=404, detail="Custom agent not found or not active")
 
-    # Upsert into user_custom_agents
     sb.table("user_custom_agents").upsert({
-        "user_id": user_id,
+        "user_id": current_user,
         "custom_agent_id": agent_id,
     }).execute()
 
-    # Increment clone count
     new_count = (agent.data[0].get("clone_count") or 0) + 1
     sb.table("custom_agents").update({"clone_count": new_count}).eq("id", agent_id).execute()
 
@@ -494,12 +520,16 @@ async def clone_agent(agent_id: str, user_id: str):
 
 
 @router.delete("/{agent_id}/clone")
-async def unclone_agent(agent_id: str, user_id: str):
+async def unclone_agent(
+    agent_id: str,
+    user_id: str,
+    current_user: str = Depends(get_current_user),
+):
     """Disable/remove a cloned custom agent."""
+    _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
-    sb.table("user_custom_agents").delete().eq("user_id", user_id).eq("custom_agent_id", agent_id).execute()
+    sb.table("user_custom_agents").delete().eq("user_id", current_user).eq("custom_agent_id", agent_id).execute()
 
-    # Decrement clone count (floor at 0)
     agent = sb.table("custom_agents").select("clone_count").eq("id", agent_id).execute()
     if agent.data:
         new_count = max(0, (agent.data[0].get("clone_count") or 1) - 1)
@@ -509,23 +539,27 @@ async def unclone_agent(agent_id: str, user_id: str):
 
 
 @router.post("/{agent_id}/rate")
-async def rate_agent(agent_id: str, body: RateAgentRequest, user_id: str):
+async def rate_agent(
+    agent_id: str,
+    body: RateAgentRequest,
+    user_id: str,
+    current_user: str = Depends(get_current_user),
+):
     """Rate a custom agent (1-5 stars + optional review)."""
+    _assert_user_is_caller(user_id, current_user)
     sb = get_sb()
 
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
 
-    # Verify agent exists
     agent = sb.table("custom_agents").select("id,rating_sum,rating_count").eq("id", agent_id).execute()
     if not agent.data:
         raise HTTPException(status_code=404, detail="Custom agent not found")
 
-    # Check if user already rated
     existing_rating = (
         sb.table("agent_ratings")
         .select("id,rating")
-        .eq("user_id", user_id)
+        .eq("user_id", current_user)
         .eq("custom_agent_id", agent_id)
         .execute()
     )
@@ -533,21 +567,18 @@ async def rate_agent(agent_id: str, body: RateAgentRequest, user_id: str):
     old_rating = 0
     if existing_rating.data:
         old_rating = existing_rating.data[0]["rating"]
-        # Update existing rating
         sb.table("agent_ratings").update({
             "rating": body.rating,
             "review": body.review,
         }).eq("id", existing_rating.data[0]["id"]).execute()
     else:
-        # Insert new rating
         sb.table("agent_ratings").insert({
-            "user_id": user_id,
+            "user_id": current_user,
             "custom_agent_id": agent_id,
             "rating": body.rating,
             "review": body.review,
         }).execute()
 
-    # Update aggregate rating on the agent
     current_sum = agent.data[0].get("rating_sum") or 0
     current_count = agent.data[0].get("rating_count") or 0
 

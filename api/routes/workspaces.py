@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from api.auth import (
+    assert_is_caller,
+    get_current_user,
+    get_workspace_role,
+    require_workspace_member,
+    require_workspace_owner,
+)
 from api.db import get_sb
 from api.models.workspace import (
     FeedMessage,
@@ -27,7 +34,7 @@ router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 
 @router.get("/directory/users")
-async def list_approved_users():
+async def list_approved_users(current_user: str = Depends(get_current_user)):
     """List all approved users with their agent info. Used for @ mentions."""
     sb = get_sb()
     users = (
@@ -37,7 +44,6 @@ async def list_approved_users():
         .order("display_name")
         .execute()
     )
-    # Also get agent names
     agents = sb.table("agent_profiles").select("user_id, agent_name").execute()
     agent_map = {a["user_id"]: a["agent_name"] for a in (agents.data or [])}
 
@@ -59,21 +65,25 @@ async def list_approved_users():
 
 
 @router.post("/", response_model=Workspace, status_code=201)
-async def create_workspace(user_id: UUID, body: WorkspaceCreate):
-    """Create a workspace and add the creator as owner."""
+async def create_workspace(
+    user_id: UUID,
+    body: WorkspaceCreate,
+    current_user: str = Depends(get_current_user),
+):
+    """Create a workspace; creator becomes owner."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
     data = body.model_dump()
-    data["created_by"] = str(user_id)
+    data["created_by"] = current_user
     result = sb.table("workspaces").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=400, detail="Failed to create workspace")
     workspace = result.data[0]
 
-    # Add creator as owner
     sb.table("workspace_members").insert(
         {
             "workspace_id": workspace["id"],
-            "user_id": str(user_id),
+            "user_id": current_user,
             "role": "owner",
         }
     ).execute()
@@ -82,14 +92,17 @@ async def create_workspace(user_id: UUID, body: WorkspaceCreate):
 
 
 @router.get("/user/{user_id}", response_model=list[WorkspaceWithMembers])
-async def list_workspaces(user_id: UUID):
-    """List all workspaces the user is a member of."""
+async def list_workspaces(
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """List all workspaces the caller is a member of."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
-    # Get workspace IDs for this user
     memberships = (
         sb.table("workspace_members")
         .select("workspace_id, role")
-        .eq("user_id", str(user_id))
+        .eq("user_id", current_user)
         .execute()
     )
     if not memberships.data:
@@ -98,7 +111,6 @@ async def list_workspaces(user_id: UUID):
     ws_roles = {m["workspace_id"]: m["role"] for m in memberships.data}
     ws_ids = list(ws_roles.keys())
 
-    # Fetch workspaces
     workspaces = (
         sb.table("workspaces")
         .select("*")
@@ -107,7 +119,6 @@ async def list_workspaces(user_id: UUID):
         .execute()
     )
 
-    # Count members per workspace
     result = []
     for ws in workspaces.data:
         count_result = (
@@ -128,9 +139,17 @@ async def list_workspaces(user_id: UUID):
 
 
 @router.get("/{workspace_id}", response_model=WorkspaceWithMembers)
-async def get_workspace(workspace_id: UUID, user_id: UUID | None = None):
-    """Get workspace details."""
+async def get_workspace(
+    workspace_id: UUID,
+    user_id: UUID | None = None,
+    current_user: str = Depends(get_current_user),
+):
+    """Get workspace details. Caller must be a member."""
+    if user_id is not None:
+        assert_is_caller(user_id, current_user)
     sb = get_sb()
+    require_workspace_member(sb, str(workspace_id), current_user)
+
     result = (
         sb.table("workspaces").select("*").eq("id", str(workspace_id)).execute()
     )
@@ -145,17 +164,7 @@ async def get_workspace(workspace_id: UUID, user_id: UUID | None = None):
         .execute()
     )
 
-    role = None
-    if user_id:
-        membership = (
-            sb.table("workspace_members")
-            .select("role")
-            .eq("workspace_id", str(workspace_id))
-            .eq("user_id", str(user_id))
-            .execute()
-        )
-        if membership.data:
-            role = membership.data[0]["role"]
+    role = get_workspace_role(sb, str(workspace_id), current_user)
 
     return WorkspaceWithMembers(
         **ws,
@@ -165,9 +174,14 @@ async def get_workspace(workspace_id: UUID, user_id: UUID | None = None):
 
 
 @router.patch("/{workspace_id}", response_model=Workspace)
-async def update_workspace(workspace_id: UUID, body: WorkspaceUpdate):
-    """Update workspace details."""
+async def update_workspace(
+    workspace_id: UUID,
+    body: WorkspaceUpdate,
+    current_user: str = Depends(get_current_user),
+):
+    """Update workspace details. Owner only."""
     sb = get_sb()
+    require_workspace_owner(sb, str(workspace_id), current_user)
     data = body.model_dump(exclude_none=True)
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -188,9 +202,13 @@ async def update_workspace(workspace_id: UUID, body: WorkspaceUpdate):
 
 
 @router.get("/{workspace_id}/members", response_model=list[WorkspaceMember])
-async def list_members(workspace_id: UUID):
-    """List members of a workspace."""
+async def list_members(
+    workspace_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """List members of a workspace. Member only."""
     sb = get_sb()
+    require_workspace_member(sb, str(workspace_id), current_user)
     result = (
         sb.table("workspace_members")
         .select("*, users(display_name)")
@@ -208,20 +226,23 @@ async def list_members(workspace_id: UUID):
 
 
 @router.post("/{workspace_id}/join", response_model=WorkspaceMember)
-async def join_workspace(workspace_id: UUID, user_id: UUID):
-    """Join a workspace as a member."""
+async def join_workspace(
+    workspace_id: UUID,
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """Join a workspace. Caller must join as themselves."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
-    # Check workspace exists
     ws = sb.table("workspaces").select("id").eq("id", str(workspace_id)).execute()
     if not ws.data:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
-    # Check not already a member
     existing = (
         sb.table("workspace_members")
         .select("user_id")
         .eq("workspace_id", str(workspace_id))
-        .eq("user_id", str(user_id))
+        .eq("user_id", current_user)
         .execute()
     )
     if existing.data:
@@ -230,7 +251,7 @@ async def join_workspace(workspace_id: UUID, user_id: UUID):
     result = sb.table("workspace_members").insert(
         {
             "workspace_id": str(workspace_id),
-            "user_id": str(user_id),
+            "user_id": current_user,
             "role": "member",
         }
     ).execute()
@@ -240,21 +261,16 @@ async def join_workspace(workspace_id: UUID, user_id: UUID):
 
 
 @router.delete("/{workspace_id}")
-async def delete_workspace(workspace_id: UUID, user_id: UUID):
+async def delete_workspace(
+    workspace_id: UUID,
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
     """Delete a workspace and all its data. Owner only."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
-    # Check ownership
-    membership = (
-        sb.table("workspace_members")
-        .select("role")
-        .eq("workspace_id", str(workspace_id))
-        .eq("user_id", str(user_id))
-        .execute()
-    )
-    if not membership.data or membership.data[0]["role"] != "owner":
-        raise HTTPException(status_code=403, detail="Only the workspace owner can delete it")
+    require_workspace_owner(sb, str(workspace_id), current_user)
 
-    # Delete related data (cascade should handle most, but be explicit)
     sb.table("messages").delete().eq("workspace_id", str(workspace_id)).execute()
     sb.table("shared_relationships").delete().eq("workspace_id", str(workspace_id)).execute()
     sb.table("shared_entities").delete().eq("workspace_id", str(workspace_id)).execute()
@@ -266,14 +282,19 @@ async def delete_workspace(workspace_id: UUID, user_id: UUID):
 
 
 @router.delete("/{workspace_id}/leave")
-async def leave_workspace(workspace_id: UUID, user_id: UUID):
-    """Leave a workspace."""
+async def leave_workspace(
+    workspace_id: UUID,
+    user_id: UUID,
+    current_user: str = Depends(get_current_user),
+):
+    """Leave a workspace. Caller must leave as themselves."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
     result = (
         sb.table("workspace_members")
         .delete()
         .eq("workspace_id", str(workspace_id))
-        .eq("user_id", str(user_id))
+        .eq("user_id", current_user)
         .execute()
     )
     if not result.data:
@@ -282,15 +303,18 @@ async def leave_workspace(workspace_id: UUID, user_id: UUID):
 
 
 @router.post("/{workspace_id}/invite", response_model=WorkspaceMember)
-async def invite_member(workspace_id: UUID, body: WorkspaceInvite):
-    """Invite a user to a workspace."""
+async def invite_member(
+    workspace_id: UUID,
+    body: WorkspaceInvite,
+    current_user: str = Depends(get_current_user),
+):
+    """Invite a user to a workspace. Member only."""
     sb = get_sb()
-    # Check workspace exists
+    require_workspace_member(sb, str(workspace_id), current_user)
     ws = sb.table("workspaces").select("id").eq("id", str(workspace_id)).execute()
     if not ws.data:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
-    # Check not already a member
     existing = (
         sb.table("workspace_members")
         .select("user_id")
@@ -319,9 +343,15 @@ async def invite_member(workspace_id: UUID, body: WorkspaceInvite):
 
 
 @router.get("/{workspace_id}/feed", response_model=list[FeedMessage])
-async def get_feed(workspace_id: UUID, limit: int = 50, offset: int = 0):
-    """Get workspace feed messages (chronological)."""
+async def get_feed(
+    workspace_id: UUID,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: str = Depends(get_current_user),
+):
+    """Get workspace feed messages (chronological). Member only."""
     sb = get_sb()
+    require_workspace_member(sb, str(workspace_id), current_user)
     result = (
         sb.table("messages")
         .select("*, users(display_name), agent_profiles(agent_name)")
@@ -346,13 +376,19 @@ async def get_feed(workspace_id: UUID, limit: int = 50, offset: int = 0):
 
 @router.post("/{workspace_id}/feed", response_model=FeedMessage, status_code=201)
 async def post_to_feed(
-    workspace_id: UUID, user_id: UUID, body: FeedMessageCreate
+    workspace_id: UUID,
+    user_id: UUID,
+    body: FeedMessageCreate,
+    current_user: str = Depends(get_current_user),
 ):
-    """Post a message to the workspace feed (human sender)."""
+    """Post a message to the workspace feed. Member only; posts as self."""
+    assert_is_caller(user_id, current_user)
     sb = get_sb()
+    require_workspace_member(sb, str(workspace_id), current_user)
+
     data = {
         "workspace_id": str(workspace_id),
-        "user_id": str(user_id),
+        "user_id": current_user,
         "sender_type": "human",
         "content": body.content,
         "confidence": {},
@@ -379,8 +415,8 @@ async def post_to_feed(
         ws_name = ws_result.data[0]["name"] if ws_result.data else "workspace"
 
         for member in (members.data or []):
-            if member["user_id"] == str(user_id):
-                continue  # Don't trigger the poster's own agent
+            if member["user_id"] == current_user:
+                continue
             agent_result = (
                 sb.table("agent_profiles")
                 .select("id")
@@ -397,6 +433,6 @@ async def post_to_feed(
                     "priority": 10,
                 }).execute()
     except Exception:
-        pass  # Agent triggering is best-effort
+        pass
 
     return FeedMessage(**result.data[0])

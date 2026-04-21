@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from api.auth import get_current_user, require_admin
 from api.db import get_sb
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
@@ -35,8 +36,17 @@ async def list_feedback(
     limit: int = Query(50),
     offset: int = Query(0),
     user_id: Optional[str] = Query(None),
+    current_user: str = Depends(get_current_user),
 ):
-    """List all feedback with optional filters. sort: newest | upvotes | status"""
+    """List all feedback with optional filters. sort: newest | upvotes | status
+
+    Feedback is cohort-visible, so any authenticated user can list. The
+    user_id query param controls which items to annotate with the caller's
+    upvote state — it must match the caller.
+    """
+    if user_id is not None and user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot read another user's upvote state")
+    effective_user_id = user_id or current_user
     sb = get_sb()
 
     query = sb.table("feedback").select("*, users(display_name)")
@@ -56,13 +66,12 @@ async def list_feedback(
     result = query.range(offset, offset + limit - 1).execute()
     items = result.data or []
 
-    # If user_id provided, annotate which ones the user has upvoted
-    if user_id and items:
+    if effective_user_id and items:
         feedback_ids = [item["id"] for item in items]
         upvotes_result = (
             sb.table("feedback_upvotes")
             .select("feedback_id")
-            .eq("user_id", user_id)
+            .eq("user_id", effective_user_id)
             .in_("feedback_id", feedback_ids)
             .execute()
         )
@@ -74,7 +83,7 @@ async def list_feedback(
 
 
 @router.get("/stats")
-async def get_feedback_stats():
+async def get_feedback_stats(current_user: str = Depends(get_current_user)):
     """Summary stats: open bugs, feature requests, etc."""
     sb = get_sb()
 
@@ -98,8 +107,15 @@ async def get_feedback_stats():
 
 
 @router.get("/{feedback_id}")
-async def get_feedback(feedback_id: UUID, user_id: Optional[str] = Query(None)):
+async def get_feedback(
+    feedback_id: UUID,
+    user_id: Optional[str] = Query(None),
+    current_user: str = Depends(get_current_user),
+):
     """Get a single feedback item."""
+    if user_id is not None and user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot read another user's upvote state")
+    effective_user_id = user_id or current_user
     sb = get_sb()
     result = (
         sb.table("feedback")
@@ -112,11 +128,11 @@ async def get_feedback(feedback_id: UUID, user_id: Optional[str] = Query(None)):
 
     item = result.data[0]
 
-    if user_id:
+    if effective_user_id:
         upvote = (
             sb.table("feedback_upvotes")
             .select("feedback_id")
-            .eq("user_id", user_id)
+            .eq("user_id", effective_user_id)
             .eq("feedback_id", str(feedback_id))
             .execute()
         )
@@ -126,15 +142,21 @@ async def get_feedback(feedback_id: UUID, user_id: Optional[str] = Query(None)):
 
 
 @router.post("")
-async def create_feedback(data: CreateFeedbackRequest, user_id: str = Query(...)):
-    """Create a new feedback item."""
+async def create_feedback(
+    data: CreateFeedbackRequest,
+    user_id: str = Query(...),
+    current_user: str = Depends(get_current_user),
+):
+    """Create a new feedback item. Caller must post as themselves."""
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot post feedback as another user")
     sb = get_sb()
 
     if data.type not in ("bug", "feature", "improvement", "general"):
         raise HTTPException(status_code=400, detail="Invalid feedback type")
 
     result = sb.table("feedback").insert({
-        "user_id": user_id,
+        "user_id": current_user,
         "type": data.type,
         "title": data.title,
         "body": data.body,
@@ -152,8 +174,11 @@ async def update_feedback(
     feedback_id: UUID,
     data: UpdateFeedbackRequest,
     user_id: str = Query(...),
+    current_user: str = Depends(get_current_user),
 ):
     """Update feedback. Owner can edit title/body; admin can change status/priority."""
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot update feedback as another user")
     sb = get_sb()
 
     existing = (
@@ -165,7 +190,17 @@ async def update_feedback(
     if not existing.data:
         raise HTTPException(status_code=404, detail="Feedback not found")
 
-    is_owner = existing.data[0]["user_id"] == user_id
+    is_owner = existing.data[0]["user_id"] == current_user
+
+    # Determine if caller is admin (for status/priority changes).
+    is_admin = False
+    if data.status is not None or data.priority is not None:
+        try:
+            require_admin(current_user)
+            is_admin = True
+        except HTTPException:
+            is_admin = False
+
     updates: dict = {"updated_at": "now()"}
 
     if is_owner:
@@ -174,11 +209,11 @@ async def update_feedback(
         if data.body is not None:
             updates["body"] = data.body
 
-    # Status and priority are admin-level changes (allowed here for simplicity)
-    if data.status is not None:
-        updates["status"] = data.status
-    if data.priority is not None:
-        updates["priority"] = data.priority
+    if is_admin:
+        if data.status is not None:
+            updates["status"] = data.status
+        if data.priority is not None:
+            updates["priority"] = data.priority
 
     if len(updates) == 1:
         raise HTTPException(status_code=403, detail="No permitted fields to update")
@@ -196,36 +231,38 @@ async def update_feedback(
 
 
 @router.post("/{feedback_id}/upvote")
-async def toggle_upvote(feedback_id: UUID, user_id: str = Query(...)):
+async def toggle_upvote(
+    feedback_id: UUID,
+    user_id: str = Query(...),
+    current_user: str = Depends(get_current_user),
+):
     """Toggle upvote on a feedback item. Returns updated upvote count and state."""
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot upvote as another user")
     sb = get_sb()
 
-    # Check if already upvoted
     existing = (
         sb.table("feedback_upvotes")
         .select("feedback_id")
-        .eq("user_id", user_id)
+        .eq("user_id", current_user)
         .eq("feedback_id", str(feedback_id))
         .execute()
     )
 
     if existing.data:
-        # Remove upvote
-        sb.table("feedback_upvotes").delete().eq("user_id", user_id).eq(
+        sb.table("feedback_upvotes").delete().eq("user_id", current_user).eq(
             "feedback_id", str(feedback_id)
         ).execute()
         sb.rpc("decrement_feedback_upvotes", {"fid": str(feedback_id)}).execute()
         upvoted = False
     else:
-        # Add upvote
         sb.table("feedback_upvotes").insert({
-            "user_id": user_id,
+            "user_id": current_user,
             "feedback_id": str(feedback_id),
         }).execute()
         sb.rpc("increment_feedback_upvotes", {"fid": str(feedback_id)}).execute()
         upvoted = True
 
-    # Return updated count
     result = (
         sb.table("feedback")
         .select("upvotes")
