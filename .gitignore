@@ -13,3 +13,6 @@ dist/
 .DS_Store
 .build-logs/
 snapshots/
+
+# Halsey overnight audit drafts — never commit
+OVERNIGHT_AUDIT.md
