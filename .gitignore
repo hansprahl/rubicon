@@ -14,5 +14,10 @@ dist/
 .build-logs/
 snapshots/
 
+# Credentials
+token.json
+*.pem
+credentials
+
 # Halsey overnight audit drafts — never commit
 OVERNIGHT_AUDIT.md
