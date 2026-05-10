@@ -10,17 +10,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from anthropic import AsyncAnthropic
-
-from api.config import settings
+from api.runtime.llm_client import create_message
 from api.runtime.tool_executor import AGENT_TOOLS, execute_tool
 from api.runtime.repo_tool_executor import execute_repo_tool
 
 # The model used for all agent interactions
 MODEL = "claude-sonnet-4-20250514"
 
-# Reuse a single async client across all ReAct loops
-_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 MAX_TOKENS = 4096
 MAX_TOOL_ROUNDS = 10  # Safety limit on ReAct iterations
 
@@ -148,8 +144,6 @@ async def run_react_loop(
     and handles tool_use responses by routing to the appropriate executor.
     Loops until Claude gives a final text response or we hit MAX_TOOL_ROUNDS.
     """
-    client = _client
-
     # Load the agent's enabled repository tools
     repo_tools = await _load_agent_repo_tools(context.agent_id)
     all_tools = AGENT_TOOLS + repo_tools
@@ -160,11 +154,22 @@ async def run_react_loop(
 
     context.history.append({"role": "user", "content": user_message})
 
+    # Cache the system prompt — it's identical across every ReAct iteration and
+    # across every turn for this agent, so caching it cuts input tokens ~90%
+    # per round.
+    system_blocks = [
+        {
+            "type": "text",
+            "text": context.system_prompt,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
     for _round in range(MAX_TOOL_ROUNDS):
-        response = await client.messages.create(
+        response = await create_message(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=context.system_prompt,
+            system=system_blocks,
             messages=context.history,
             tools=all_tools,
         )

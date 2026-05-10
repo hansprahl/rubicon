@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import anthropic
-
-from api.config import settings
 from api.models.onboarding import IDPParsed
+from api.runtime.llm_client import create_message
 
 MODEL = "claude-sonnet-4-20250514"
 
@@ -28,9 +26,7 @@ Be thorough — extract every goal, development area, and priority mentioned. Ke
 
 async def parse_idp(document_text: str) -> IDPParsed:
     """Send IDP text to Claude and extract structured profile data."""
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-
-    response = await client.messages.create(
+    response = await create_message(
         model=MODEL,
         max_tokens=2048,
         messages=[

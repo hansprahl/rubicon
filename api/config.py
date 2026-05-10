@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     cors_origins_str: str = "http://localhost:3000"
     environment: str = "development"
+    # Max concurrent in-flight calls to the Anthropic API across the process.
+    # Tune to stay under your account's tokens-per-minute / requests-per-minute.
+    anthropic_max_concurrency: int = 4
+    # Max retry attempts when the Anthropic API returns 429 / 5xx / connection errors.
+    anthropic_max_retries: int = 5
 
     @property
     def cors_origins(self) -> list[str]:

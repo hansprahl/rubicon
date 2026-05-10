@@ -13,10 +13,8 @@ from __future__ import annotations
 
 import json
 
-import anthropic
-
-from api.config import settings
 from api.db import get_sb
+from api.runtime.llm_client import create_message
 
 MODEL = "claude-sonnet-4-20250514"
 MAX_TOKENS = 4096
@@ -263,8 +261,7 @@ async def execute_repo_tool(
 
     # Call Claude
     try:
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
+        response = await create_message(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],

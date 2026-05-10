@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import anthropic
-
-from api.config import settings
 from api.models.onboarding import InsightsParsed
+from api.runtime.llm_client import create_message
 
 MODEL = "claude-sonnet-4-20250514"
 
@@ -40,9 +38,7 @@ For color_scores, estimate a 0.0-1.0 score for each color based on the profile c
 
 async def parse_insights(document_text: str) -> InsightsParsed:
     """Send Insights profile text to Claude and extract structured data."""
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-
-    response = await client.messages.create(
+    response = await create_message(
         model=MODEL,
         max_tokens=2048,
         messages=[

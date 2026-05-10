@@ -13,9 +13,6 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-import anthropic
-
-from api.config import settings
 from api.db import get_sb
 from api.doctrine.confidence import parse_confidence
 from api.doctrine.events import event_bus
@@ -25,8 +22,13 @@ from api.doctrine.store import (
 )
 from api.models.agent import ConfidenceScore
 from api.runtime.agent_worker import MODEL, MAX_TOKENS
+from api.runtime.llm_client import create_message
 
 logger = logging.getLogger(__name__)
+
+# Cap on how many other agents evaluate any single published entity. The full
+# cohort (~9 agents) fanning out per publish was a major rate-limit driver.
+MAX_EVALUATORS_PER_ENTITY = 3
 
 
 async def _get_workspace_agents(workspace_id: UUID) -> list[dict]:
@@ -62,8 +64,6 @@ async def evaluate_entity(
     SUPPORTS or CONTRADICTS the entity. Returns the created relationship or
     None if the agent abstains.
     """
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-
     agent_name = evaluating_agent["agent_name"]
     expertise = evaluating_agent.get("expertise", [])
     values = evaluating_agent.get("values", [])
@@ -92,7 +92,7 @@ async def evaluate_entity(
         f"Properties: {entity.get('properties', {})}"
     )
 
-    response = await client.messages.create(
+    response = await create_message(
         model=MODEL,
         max_tokens=512,
         system=system,
@@ -300,8 +300,13 @@ async def handle_finding_published(event: dict) -> None:
     if not other_agents:
         return
 
-    # Each other agent evaluates the finding
-    for agent in other_agents:
+    # Cap the fan-out: one publish should not trigger an unbounded number of
+    # Claude calls. Prefer agents whose expertise overlaps the entity, fall
+    # back to a stable slice of the rest.
+    evaluators = _select_evaluators(other_agents, entity, MAX_EVALUATORS_PER_ENTITY)
+
+    # Each selected agent evaluates the finding
+    for agent in evaluators:
         try:
             await evaluate_entity(agent, entity, workspace_id)
         except Exception:
@@ -311,6 +316,31 @@ async def handle_finding_published(event: dict) -> None:
 
     # Check for disagreements after all evaluations
     await detect_disagreements(workspace_id, UUID(entity_id))
+
+
+def _select_evaluators(
+    candidates: list[dict],
+    entity: dict,
+    limit: int,
+) -> list[dict]:
+    """Pick up to `limit` agents most likely to have a useful opinion."""
+    if len(candidates) <= limit:
+        return candidates
+
+    entity_text = " ".join(
+        str(v) for v in (
+            entity.get("name", ""),
+            entity.get("entity_type", ""),
+            entity.get("properties", {}),
+        )
+    ).lower()
+
+    def overlap_score(agent: dict) -> int:
+        expertise = agent.get("expertise") or []
+        return sum(1 for term in expertise if str(term).lower() in entity_text)
+
+    ranked = sorted(candidates, key=overlap_score, reverse=True)
+    return ranked[:limit]
 
 
 async def post_event_to_feed(event: dict) -> None:

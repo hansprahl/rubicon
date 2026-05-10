@@ -9,13 +9,12 @@ from __future__ import annotations
 import json
 from uuid import UUID
 
-import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.auth import assert_is_caller, get_current_user
-from api.config import settings
 from api.db import get_sb
+from api.runtime.llm_client import create_message
 
 router = APIRouter(prefix="/north-star", tags=["north-star"])
 
@@ -136,8 +135,6 @@ async def _synthesize_north_star(
     enrichment: dict,
     answers: dict[str, str],
 ) -> dict:
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-
     doc_context = ""
     idp = docs.get("idp", {}) or {}
     ethics = docs.get("ethics", {}) or {}
@@ -219,7 +216,7 @@ Return your response as a JSON object with this exact structure:
 
 Return ONLY the JSON. No commentary, no markdown fences."""
 
-    response = await client.messages.create(
+    response = await create_message(
         model=MODEL,
         max_tokens=2048,
         messages=[{"role": "user", "content": synthesis_prompt}],

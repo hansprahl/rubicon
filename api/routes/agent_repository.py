@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.auth import get_current_user
-from api.config import settings
 from api.db import get_sb
+from api.runtime.llm_client import create_message
 
 router = APIRouter(prefix="/agent-repo", tags=["agent-repo"])
 
@@ -108,8 +107,6 @@ async def _synthesize_system_prompt(
     creator_context: str,
 ) -> str:
     """Use Claude to synthesize a professional system prompt for the custom agent."""
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-
     doctrine_parts = []
     if doctrine_config.get("confidence_scoring"):
         doctrine_parts.append("- Always report confidence scores (0-1) with reasoning for key claims.")
@@ -145,7 +142,7 @@ Write a professional, detailed system prompt for this agent. The prompt should:
 
 Keep the prompt under 800 words. Write ONLY the system prompt text, no preamble or explanation."""
 
-    response = await client.messages.create(
+    response = await create_message(
         model="claude-sonnet-4-20250514",
         max_tokens=1200,
         messages=[{"role": "user", "content": synthesis_prompt}],
@@ -392,8 +389,7 @@ async def build_agent(
 
     creator_context = _get_creator_context(sb, current_user)
 
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-    desc_response = await client.messages.create(
+    desc_response = await create_message(
         model="claude-sonnet-4-20250514",
         max_tokens=200,
         messages=[{

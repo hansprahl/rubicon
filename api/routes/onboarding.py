@@ -5,11 +5,9 @@ from __future__ import annotations
 import io
 from uuid import UUID
 
-import anthropic
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 from api.auth import get_current_user
-from api.config import settings
 from api.db import get_sb
 from api.models.onboarding import (
     OnboardingDoc,
@@ -20,6 +18,7 @@ from api.models.onboarding import (
 from api.parsers.idp_parser import parse_idp
 from api.parsers.ethics_parser import parse_ethics
 from api.parsers.insights_parser import parse_insights
+from api.runtime.llm_client import create_message
 from api.runtime.prompt_builder import build_progressive_prompt
 from api.services.prompt_service import rebuild_agent_prompt
 
@@ -81,8 +80,7 @@ async def _extract_text(file_content: bytes, filename: str) -> str:
             import base64
 
             b64 = base64.standard_b64encode(file_content).decode("utf-8")
-            client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-            response = await client.messages.create(
+            response = await create_message(
                 model=MODEL,
                 max_tokens=4096,
                 messages=[
