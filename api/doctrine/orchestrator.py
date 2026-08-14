@@ -30,6 +30,7 @@ AUTONOMY_THRESHOLDS: dict[str, int] = {
     "publish_entity": 2,
     "send_message": 2,
     "create_relationship": 2,
+    "invite_all_users": 3,
     "update_estimate": 3,
     "delete_entity": 4,
     "flag_contradiction": 4,

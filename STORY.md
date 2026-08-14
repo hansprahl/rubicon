@@ -1,5 +1,15 @@
 # Rubicon — Founder's Log
 
+## Chapter 2: The invite never asked (2026-08-14)
+
+The thing that made this product real was Jibe Turkey inviting the whole cohort from a sentence. Four months later an inspector opened the code. That move never asked me. Approve was a badge. It did not send.
+
+The product is paused. The lie is still a lie. Invite-all now sits behind the queue at default autonomy. Approve fires the payload before it flips the badge. If the fire fails, the badge stays pending.
+
+One person at a time from a human tap was never the hole. That path is still a human tap.
+
+Production is not redeployed. The paused site is still the old code. This is the tree, not the live box.
+
 ## Chapter 1: The Day the Twin Acted (2026-04-09)
 
 I shipped Rubicon to production a couple days ago and spent today turning it from "a thing my cohort can log into" into "a thing my cohort can actually live in."

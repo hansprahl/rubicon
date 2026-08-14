@@ -296,7 +296,11 @@ async def _post_message(tool_input: dict, agent_id: str, user_id: str) -> str:
             user_id=UUID(user_id),
             agent_id=UUID(agent_id),
             action_type="send_message",
-            payload={"workspace_id": workspace_id, "content": content},
+            payload={
+                "workspace_id": workspace_id,
+                "content": content,
+                "agent_id": agent_id,
+            },
             workspace_id=UUID(workspace_id),
         )
         return json.dumps({
@@ -459,11 +463,8 @@ async def _list_my_workspaces(tool_input: dict, agent_id: str, user_id: str) -> 
     return json.dumps(result)
 
 
-async def _invite_all_users_to_workspace(tool_input: dict, agent_id: str, user_id: str) -> str:
-    sb = get_sb()
-    workspace_id = tool_input["workspace_id"]
-
-    # Verify the user is the workspace owner
+def _do_invite_all(sb, workspace_id: str, user_id: str) -> dict:
+    """Insert every approved user the owner has not already added."""
     membership = (
         sb.table("workspace_members")
         .select("role")
@@ -472,12 +473,9 @@ async def _invite_all_users_to_workspace(tool_input: dict, agent_id: str, user_i
         .execute()
     )
     if not membership.data or membership.data[0]["role"] != "owner":
-        return json.dumps({"error": "Only workspace owners can bulk-invite users."})
+        return {"error": "Only workspace owners can bulk-invite users."}
 
-    # Get all approved users
     users = sb.table("users").select("id").eq("status", "approved").execute()
-
-    # Get existing members
     existing = (
         sb.table("workspace_members")
         .select("user_id")
@@ -497,14 +495,72 @@ async def _invite_all_users_to_workspace(tool_input: dict, agent_id: str, user_i
                 }).execute()
                 invited += 1
             except Exception:
-                pass  # Skip duplicates or constraint errors
+                pass
 
-    return json.dumps({
+    return {
         "status": "done",
         "invited": invited,
         "already_members": len(existing_ids),
         "message": f"Invited {invited} new users to the workspace.",
-    })
+    }
+
+
+async def _invite_all_users_to_workspace(tool_input: dict, agent_id: str, user_id: str) -> str:
+    from api.doctrine.orchestrator import requires_approval, submit_for_approval
+
+    sb = get_sb()
+    workspace_id = tool_input["workspace_id"]
+    autonomy = _get_autonomy(sb, agent_id)
+
+    if requires_approval("invite_all_users", autonomy):
+        approval = await submit_for_approval(
+            user_id=UUID(user_id),
+            agent_id=UUID(agent_id),
+            action_type="invite_all_users",
+            payload={"workspace_id": workspace_id, "owner_id": user_id},
+            workspace_id=UUID(workspace_id),
+        )
+        return json.dumps({
+            "status": "pending_approval",
+            "approval_id": approval.get("id"),
+            "message": "Invite-all submitted for human approval.",
+        })
+
+    return json.dumps(_do_invite_all(sb, workspace_id, user_id))
+
+
+async def execute_approved(action_type: str, payload: dict) -> dict:
+    """Fire a queued action after a human Approve. Called by the approve routes."""
+    sb = get_sb()
+    if action_type == "publish_entity":
+        data = payload.get("entity") or {}
+        result = sb.table("shared_entities").insert(data).execute()
+        if not result.data:
+            return {"error": "Failed to publish entity"}
+        return {"status": "published", "entity_id": result.data[0]["id"]}
+    if action_type == "create_relationship":
+        data = payload.get("relationship") or {}
+        result = sb.table("shared_relationships").insert(data).execute()
+        if not result.data:
+            return {"error": "Failed to create relationship"}
+        return {"status": "created", "relationship_id": result.data[0]["id"]}
+    if action_type == "send_message":
+        msg_data = {
+            "workspace_id": payload["workspace_id"],
+            "sender_type": "agent",
+            "content": payload["content"],
+            "confidence": {},
+            "metadata": {},
+        }
+        if payload.get("agent_id"):
+            msg_data["agent_id"] = payload["agent_id"]
+        result = sb.table("messages").insert(msg_data).execute()
+        if not result.data:
+            return {"error": "Failed to post message"}
+        return {"status": "posted", "message_id": result.data[0]["id"]}
+    if action_type == "invite_all_users":
+        return _do_invite_all(sb, payload["workspace_id"], payload["owner_id"])
+    return {"error": f"Unknown action_type: {action_type}"}
 
 
 # -- Handler dispatch map --

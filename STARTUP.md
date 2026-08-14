@@ -1,6 +1,6 @@
 # STARTUP — Rubicon
 
-> Last updated: 2026-04-27. When this file disagrees with the code, the code wins.
+> Last updated: 2026-08-14. When this file disagrees with the code, the code wins.
 
 ## Identity
 
@@ -34,9 +34,14 @@ There is no active build queue. Re-entry triggers (any of):
 
 ## Active risks
 
-1. **Pause drift** — paused projects accumulate dependency rot. Next.js 14 is fine today; in 6 months, security advisories may force a forced re-engagement.
-2. **Cohort timeline** — EMBA Cohort 84 graduates eventually; member retention isn't permanent. Engagement window has a natural close.
-3. **Supabase pricing tier** — free-tier limits could hit if any cohort member triggers a heavy real-time path; monitor usage if reactivated.
+1. **Live site is still the old code.** Invite-all and dead Approve are fixed on disk. `rubicon-gamma.vercel.app` was not redeployed. A cohort member hitting the live twin still gets the Jibe Turkey path.
+2. **Pause drift** — paused projects accumulate dependency rot. Next.js 14 is fine today; in 6 months, security advisories may force a forced re-engagement.
+3. **Cohort timeline** — EMBA Cohort 84 graduates eventually; member retention isn't permanent. Engagement window has a natural close.
+
+## Recent-changes / Next-move
+
+- **2026-08-14 — Inspector holes R-1 and R-2 closed on disk.** Invite-all queues at default autonomy 2. Approve runs `execute_approved` before the status flip. Fail leaves the row pending. Tests 7/7. Not deployed. LB-P043 / LB-P044 closed for the tree.
+- **Next move:** do not unshelve unless a cohort member asks or you choose to ship this fix to the live box. Kindred BIPA ask is Saturday Aug 15.
 
 ## Recent significant changes (pre-pause)
 

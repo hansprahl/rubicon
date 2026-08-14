@@ -114,9 +114,17 @@ async def approve_action(
     body: ApprovalResolve | None = None,
     current_user: str = Depends(get_current_user),
 ):
-    """Approve a pending action. Caller must own it."""
+    """Approve a pending action and fire it. Caller must own it."""
     sb = get_sb()
-    _require_owner(sb, approval_id, current_user)
+    row = _require_owner(sb, approval_id, current_user)
+    if row.get("status") != "pending":
+        raise HTTPException(status_code=404, detail="Approval not found or already resolved")
+
+    from api.runtime.tool_executor import execute_approved
+    fired = await execute_approved(row["action_type"], row.get("payload") or {})
+    if fired.get("error"):
+        raise HTTPException(status_code=400, detail=fired["error"])
+
     update = {
         "status": "approved",
         "resolved_at": datetime.now(timezone.utc).isoformat(),
@@ -168,9 +176,17 @@ async def edit_and_approve(
     body: ApprovalEditAndApprove,
     current_user: str = Depends(get_current_user),
 ):
-    """Edit the payload and approve in one step. Caller must own it."""
+    """Edit the payload, fire it, then mark approved. Caller must own it."""
     sb = get_sb()
-    _require_owner(sb, approval_id, current_user)
+    row = _require_owner(sb, approval_id, current_user)
+    if row.get("status") != "pending":
+        raise HTTPException(status_code=404, detail="Approval not found or already resolved")
+
+    from api.runtime.tool_executor import execute_approved
+    fired = await execute_approved(row["action_type"], body.payload)
+    if fired.get("error"):
+        raise HTTPException(status_code=400, detail=fired["error"])
+
     update = {
         "payload": body.payload,
         "status": "approved",
