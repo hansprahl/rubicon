@@ -2,6 +2,8 @@
 
 > Last updated: 2026-08-14. When this file disagrees with the code, the code wins.
 
+# ARCHIVE — startup live slice ends here
+
 ## Identity
 
 Collaborative digital twin platform for EMBA Cohort 84 (University of Denver). Each member gets a persistent AI agent built from their IDP, Ethics paper, and Insights profile. Twin-to-twin messaging, shared workspaces, war-room scenario sims, knowledge graph, mobile-responsive.
