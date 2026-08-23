@@ -24,7 +24,7 @@ There is no active build queue. Re-entry triggers (any of):
 
 ## Architecture (load-bearing)
 
-- **Frontend:** Next.js 14 (App Router) + Tailwind + shadcn/ui in `apps/web/`
+- **Frontend:** Next.js 16 (App Router) + Tailwind + shadcn/ui in `apps/web/` (bumped 2026-08-23 on disk; not deployed)
 - **Backend:** FastAPI (Python) in `api/`
 - **Database:** Supabase Postgres — migrations in `supabase/migrations/`
 - **Auth:** Supabase Auth (magic link + Google OAuth) with JWT-gated routes (Phase 1+2 hardening shipped)
@@ -37,7 +37,7 @@ There is no active build queue. Re-entry triggers (any of):
 ## Active risks
 
 1. **Live site is still the old code.** Invite-all and dead Approve are fixed on disk. `rubicon-gamma.vercel.app` was not redeployed. A cohort member hitting the live twin still gets the Jibe Turkey path.
-2. **Pause drift** — paused projects accumulate dependency rot. Next.js 14 is fine today; in 6 months, security advisories may force a forced re-engagement.
+2. **Pause drift** — paused projects accumulate dependency rot. Next.js 16 is on disk as of 2026-08-23 (npm high/crit 0); live box still the old build until a deploy stamp.
 3. **Cohort timeline** — EMBA Cohort 84 graduates eventually; member retention isn't permanent. Engagement window has a natural close.
 
 ## Recent-changes / Next-move
