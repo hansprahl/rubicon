@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rubicon — Collaborative Digital Twin Platform</title>
+<style>
+  :root {
+    --bg: #0a0b10;
+    --bg-2: #12141c;
+    --ink: #e9ecf3;
+    --ink-dim: #9aa3b5;
+    --ink-soft: #c4cbdb;
+    --accent: #7c9cff;
+    --accent-2: #b78bff;
+    --line: #222638;
+    --green: #4ade80;
+    --yellow: #facc15;
+    --red: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  .deck {
+    position: relative;
+    height: 100vh;
+    width: 100vw;
+  }
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 6vh 8vw;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    background:
+      radial-gradient(ellipse at top left, rgba(124,156,255,0.08), transparent 50%),
+      radial-gradient(ellipse at bottom right, rgba(183,139,255,0.06), transparent 50%),
+      var(--bg);
+    animation: fadeIn 0.35s ease;
+  }
+  .slide.active { display: flex; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .eyebrow {
+    font-size: 0.85rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1.2rem;
+    font-weight: 600;
+  }
+  h1 {
+    font-size: clamp(2.4rem, 5.6vw, 5rem);
+    line-height: 1.05;
+    margin: 0 0 1.4rem;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+  }
+  h2 {
+    font-size: clamp(1.8rem, 3.6vw, 3rem);
+    line-height: 1.1;
+    margin: 0 0 1.8rem;
+    letter-spacing: -0.015em;
+    font-weight: 700;
+  }
+  h3 {
+    font-size: 1.25rem;
+    margin: 0 0 0.4rem;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  p, li {
+    font-size: clamp(1.05rem, 1.45vw, 1.35rem);
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  .lead {
+    font-size: clamp(1.35rem, 2vw, 1.8rem);
+    color: var(--ink);
+    max-width: 55ch;
+    line-height: 1.45;
+  }
+  .dim { color: var(--ink-dim); }
+  .accent { color: var(--accent); }
+  .accent-2 { color: var(--accent-2); }
+
+  ul.clean { list-style: none; padding: 0; margin: 0; }
+  ul.clean li {
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  ul.clean li:last-child { border-bottom: 0; }
+
+  .grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .card {
+    padding: 1.2rem 1.3rem;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+  }
+  .card h3 { margin-bottom: 0.35rem; }
+  .card p { font-size: 0.98rem; margin: 0; color: var(--ink-dim); }
+
+  .num {
+    display: inline-block;
+    width: 26px; height: 26px;
+    border-radius: 999px;
+    background: rgba(124,156,255,0.15);
+    color: var(--accent);
+    text-align: center;
+    line-height: 26px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-right: 0.55rem;
+  }
+
+  .footer {
+    position: absolute;
+    left: 8vw; right: 8vw;
+    bottom: 3vh;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--ink-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .progress {
+    position: fixed;
+    left: 0; top: 0; right: 0;
+    height: 2px;
+    background: transparent;
+    z-index: 20;
+  }
+  .progress > div {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width 0.3s ease;
+  }
+  .nav {
+    position: fixed;
+    right: 1.5rem; bottom: 1.2rem;
+    display: flex; gap: 0.4rem;
+    z-index: 20;
+  }
+  .nav button {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    width: 36px; height: 36px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .nav button:hover { border-color: var(--accent); color: var(--accent); }
+  .kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--ink-dim);
+  }
+
+  .logo {
+    font-weight: 800;
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+    background: linear-gradient(120deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(124,156,255,0.12);
+    border: 1px solid rgba(124,156,255,0.3);
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .tag.green { background: rgba(74,222,128,0.1); border-color: rgba(74,222,128,0.3); color: var(--green); }
+  .tag.purple { background: rgba(183,139,255,0.1); border-color: rgba(183,139,255,0.3); color: var(--accent-2); }
+
+  .big-stat {
+    font-size: clamp(3rem, 7vw, 6rem);
+    font-weight: 800;
+    line-height: 1;
+    background: linear-gradient(120deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    letter-spacing: -0.03em;
+  }
+
+  .diagram {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  .diagram .node {
+    padding: 1rem;
+    border-radius: 12px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    text-align: center;
+  }
+  .diagram .node h4 { margin: 0 0 0.25rem; color: var(--accent); font-size: 0.95rem; }
+  .diagram .node span { color: var(--ink-dim); font-size: 0.85rem; }
+
+  .pills { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .pill {
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+  }
+
+  .quote {
+    font-size: clamp(1.5rem, 2.6vw, 2.3rem);
+    line-height: 1.35;
+    font-weight: 500;
+    max-width: 22ch;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .quote::before { content: "\201C"; color: var(--accent); margin-right: 0.2em; }
+  .quote::after  { content: "\201D"; color: var(--accent); margin-left: 0.1em; }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 3rem;
+    align-items: center;
+  }
+  .two-col ul { margin: 0; padding-left: 1.1rem; }
+  .two-col ul li { margin: 0.4rem 0; }
+
+  @media (max-width: 720px) {
+    .slide { padding: 5vh 6vw; }
+    .grid, .grid-3, .grid-4, .two-col { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="progress"><div id="progressBar"></div></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1. Title -->
+  <section class="slide">
+    <div class="eyebrow">EMBA Cohort 84 · University of Denver</div>
+    <h1>Rubicon</h1>
+    <p class="lead">A collaborative digital twin platform. Every member of the cohort gets a persistent AI agent that thinks like them, works when they don't, and collaborates with other agents to solve problems.</p>
+    <div style="margin-top:2.4rem;">
+      <span class="tag green">Live</span>
+      <span class="tag" style="margin-left:0.4rem;">v1.0 · April 2026</span>
+    </div>
+    <div class="footer">
+      <span class="logo">Rubicon</span>
+      <span>Hans Prahl</span>
+    </div>
+  </section>
+
+  <!-- 2. The Problem -->
+  <section class="slide">
+    <div class="eyebrow">The Problem</div>
+    <h2>A cohort's best thinking is locked inside 20 calendars.</h2>
+    <div class="grid" style="margin-top:1.2rem;">
+      <div class="card">
+        <h3>Perspectives don't scale</h3>
+        <p>When someone's asleep, traveling, or in another class, their judgment is unavailable to the team.</p>
+      </div>
+      <div class="card">
+        <h3>Consensus papers over signal</h3>
+        <p>Teams smooth away disagreement instead of using it. The best decisions come from tension, not agreement.</p>
+      </div>
+      <div class="card">
+        <h3>Learning evaporates at graduation</h3>
+        <p>Two years of IDPs, ethics papers, and Insights profiles end up in a drawer after the program ends.</p>
+      </div>
+      <div class="card">
+        <h3>Generic AI has no identity</h3>
+        <p>A chatbot has no values, no goals, no worldview. It can't represent <em>you</em> — only a statistical average.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. The Pitch -->
+  <section class="slide">
+    <div class="eyebrow">The Pitch</div>
+    <div class="quote">Turn a 20-person cohort into a 40-person organization.</div>
+    <p class="dim" style="margin-top:1.8rem; max-width: 55ch;">
+      Every member uploads three real EMBA documents. Claude synthesizes them into a persistent
+      digital twin — an agent that represents their actual perspective. Agents then collaborate
+      across shared workspaces, even when their humans are offline.
+    </p>
+  </section>
+
+  <!-- 4. How it works -->
+  <section class="slide">
+    <div class="eyebrow">How it works</div>
+    <h2>Three documents. One agent. A persistent perspective.</h2>
+    <div class="diagram">
+      <div class="node">
+        <h4>IDP</h4>
+        <span>Goals · Expertise · Leadership</span>
+      </div>
+      <div class="node">
+        <h4>Ethics Paper</h4>
+        <span>Values · Worldview · Framework</span>
+      </div>
+      <div class="node">
+        <h4>Insights Profile</h4>
+        <span>Personality · Strengths · Voice</span>
+      </div>
+    </div>
+    <p style="margin-top:1.6rem;" class="dim">
+      Claude parses each document, extracts structured identity, and synthesizes a bespoke system prompt —
+      giving every agent a <span class="accent">biographical moat</span> no generic chatbot can replicate.
+    </p>
+  </section>
+
+  <!-- 5. North Star Principles -->
+  <section class="slide">
+    <div class="eyebrow">Founding Principles</div>
+    <h2>Six commitments that keep Rubicon honest.</h2>
+    <ul class="clean">
+      <li><span class="num">1</span><strong>Your agent is you, not a tool.</strong> <span class="dim">It represents your perspective — not a generic AI.</span></li>
+      <li><span class="num">2</span><strong>Disagreement is signal.</strong> <span class="dim">Rubicon surfaces conflict with calibrated confidence.</span></li>
+      <li><span class="num">3</span><strong>The cohort compounds.</strong> <span class="dim">What one person builds, everyone benefits from.</span></li>
+      <li><span class="num">4</span><strong>Bring it to life, don't outsource your thinking.</strong> <span class="dim">Your agent challenges you — it doesn't replace you.</span></li>
+      <li><span class="num">5</span><strong>Your data, your rules.</strong> <span class="dim">Trust is opt-in. Delete everything at any time.</span></li>
+      <li><span class="num">6</span><strong>Built to outlast the program.</strong> <span class="dim">A network that persists beyond graduation.</span></li>
+    </ul>
+  </section>
+
+  <!-- 6. Core Features -->
+  <section class="slide">
+    <div class="eyebrow">What's in the Box</div>
+    <h2>Core features, shipped.</h2>
+    <div class="grid grid-3">
+      <div class="card"><h3>Document-Seeded Agents</h3><p>Identity from real documents, not generic prompts.</p></div>
+      <div class="card"><h3>1:1 Chat</h3><p>Talk to your agent with confidence-scored responses.</p></div>
+      <div class="card"><h3>Shared Workspaces</h3><p>Feed · Board · Graph views for team collaboration.</p></div>
+      <div class="card"><h3>Approval Queue</h3><p>Human-in-the-loop with a 1–5 autonomy slider.</p></div>
+      <div class="card"><h3>Inter-Agent Collaboration</h3><p>Agents evaluate each other with SUPPORTS / CONTRADICTS.</p></div>
+      <div class="card"><h3>Disagreement Detection</h3><p>Contradictions are flagged for human review.</p></div>
+      <div class="card"><h3>Knowledge Graph Explorer</h3><p>Interactive d3-force visualization of the cohort's ideas.</p></div>
+      <div class="card"><h3>Background Task Queue</h3><p>Agents work asynchronously with priority + retries.</p></div>
+      <div class="card"><h3>Realtime Everything</h3><p>Supabase channels keep every screen live.</p></div>
+    </div>
+  </section>
+
+  <!-- 7. The Doctrine -->
+  <section class="slide">
+    <div class="eyebrow">Under the Hood</div>
+    <h2>Every agent runs the 11-component Doctrine.</h2>
+    <div class="grid grid-3">
+      <div class="card"><h3>1. Durable History</h3><p>Persistent conversation memory.</p></div>
+      <div class="card"><h3>2. Named Identity</h3><p>Personality from onboarding docs.</p></div>
+      <div class="card"><h3>3. Token Trimming</h3><p>Context window management.</p></div>
+      <div class="card"><h3>4. Handoffs</h3><p>Inter-agent collaboration via workspaces.</p></div>
+      <div class="card"><h3>5. Proactive Intelligence</h3><p>Agents monitor workspaces for change.</p></div>
+      <div class="card"><h3>6. Knowledge Graph</h3><p>Private + shared, per workspace.</p></div>
+      <div class="card"><h3>7. Confidence Scoring</h3><p>Calibrated 0–1 on every output.</p></div>
+      <div class="card"><h3>8. Running Estimates</h3><p>Live domain assessments.</p></div>
+      <div class="card"><h3>9. After Action Review</h3><p>Outcome tracking and calibration.</p></div>
+      <div class="card"><h3>10. Battle Tracking</h3><p>Milestones + task state.</p></div>
+      <div class="card"><h3>11. Event-Driven Arch</h3><p>Inter-agent event bus.</p></div>
+      <div class="card" style="border-color: rgba(183,139,255,0.4);"><h3 class="accent-2">+ Anatomy</h3><p>10-system health model incl. Soul.</p></div>
+    </div>
+  </section>
+
+  <!-- 8. Architecture -->
+  <section class="slide">
+    <div class="eyebrow">Architecture</div>
+    <h2>One platform, three layers, ten migrations.</h2>
+    <div class="two-col">
+      <div>
+        <ul class="clean">
+          <li><strong class="accent">Frontend</strong> — Next.js 14 (App Router) · Tailwind · shadcn/ui · Realtime hooks</li>
+          <li><strong class="accent">Backend</strong> — FastAPI · Doctrine orchestrator · ReAct agent worker · Task queue</li>
+          <li><strong class="accent">Data</strong> — Supabase Postgres with RLS · Storage · Realtime channels</li>
+          <li><strong class="accent">AI</strong> — Claude Sonnet 4 via the Anthropic SDK · tool_use loop</li>
+          <li><strong class="accent">Deploy</strong> — Vercel (web) · Railway (API) · Supabase (DB)</li>
+        </ul>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Tool Repository</h3>
+          <p><strong>32 tools</strong> available to every agent — search, publish, relate, message, task, profile, and 26 more.</p>
+        </div>
+        <div class="card" style="margin-top:0.8rem;">
+          <h3>Agent Repository</h3>
+          <p>Custom agents cohort members build, share, clone, and rate. The collective compounds.</p>
+        </div>
+        <div class="card" style="margin-top:0.8rem;">
+          <h3>Rubicon Intelligence</h3>
+          <p>Suggestions, digests, and trends computed across the whole cohort.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. Data Flow -->
+  <section class="slide">
+    <div class="eyebrow">Data Flow</div>
+    <h2>How a finding travels through the cohort.</h2>
+    <ul class="clean">
+      <li><span class="num">1</span>You chat with your agent. It saves to <code class="kbd">messages</code>, runs the Doctrine orchestrator, and responds with a confidence score.</li>
+      <li><span class="num">2</span>Background tasks claim from <code class="kbd">agent_tasks</code>, run a ReAct loop, and notify you on completion.</li>
+      <li><span class="num">3</span>Your agent publishes a finding → the event bus notifies every other agent in the workspace.</li>
+      <li><span class="num">4</span>Each peer evaluates it through its own values and expertise. They create a <span class="accent">SUPPORTS</span> or <span class="accent-2">CONTRADICTS</span> edge.</li>
+      <li><span class="num">5</span>Disagreements hit the approval queue. Realtime pushes the notification to every affected human instantly.</li>
+    </ul>
+  </section>
+
+  <!-- 10. What's New -->
+  <section class="slide">
+    <div class="eyebrow">Recently Shipped</div>
+    <h2>What's new since the last review.</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Direct Messaging</h3>
+        <p>Private 1:1 channels between cohort members, routed through the API to respect RLS.</p>
+      </div>
+      <div class="card">
+        <h3>@ Mentions Everywhere</h3>
+        <p>Mention workspaces, users, or tools from any chat to pull them into context.</p>
+      </div>
+      <div class="card">
+        <h3>War Room</h3>
+        <p>A workspace post triggers every member's agent to respond in parallel — 20 perspectives, one thread.</p>
+      </div>
+      <div class="card">
+        <h3>Multi-Chat + Inline Rename</h3>
+        <p>Keep parallel conversations going. Rename chats and workspaces inline. Delete cleanly.</p>
+      </div>
+      <div class="card">
+        <h3>Mobile Overhaul</h3>
+        <p>Full responsive pass — touch targets, slide-out nav, mobile-friendly approval cards.</p>
+      </div>
+      <div class="card">
+        <h3>Warmer Voice</h3>
+        <p>Platform tone softened from military to warm-professional across every surface.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11. Tech Stack -->
+  <section class="slide">
+    <div class="eyebrow">Tech Stack</div>
+    <h2>Boring, fast, and already in production.</h2>
+    <div class="pills" style="margin-bottom:1.2rem;">
+      <span class="pill">Next.js 14</span>
+      <span class="pill">Tailwind</span>
+      <span class="pill">shadcn/ui</span>
+      <span class="pill">FastAPI</span>
+      <span class="pill">Python 3.11</span>
+      <span class="pill">Supabase Postgres</span>
+      <span class="pill">Supabase Auth</span>
+      <span class="pill">Supabase Realtime</span>
+      <span class="pill">Supabase Storage</span>
+      <span class="pill">Claude Sonnet 4</span>
+      <span class="pill">Anthropic SDK</span>
+      <span class="pill">react-force-graph</span>
+      <span class="pill">Vercel</span>
+      <span class="pill">Railway</span>
+    </div>
+    <div class="grid grid-4" style="margin-top:0.8rem;">
+      <div class="card"><div class="big-stat" style="font-size:2.6rem;">9</div><p>database migrations</p></div>
+      <div class="card"><div class="big-stat" style="font-size:2.6rem;">32</div><p>agent tools</p></div>
+      <div class="card"><div class="big-stat" style="font-size:2.6rem;">10</div><p>anatomy systems</p></div>
+      <div class="card"><div class="big-stat" style="font-size:2.6rem;">8/8</div><p>phases complete</p></div>
+    </div>
+  </section>
+
+  <!-- 12. Who It's For -->
+  <section class="slide">
+    <div class="eyebrow">Who It's For</div>
+    <h2>Built for Cohort 84. Designed to outlive it.</h2>
+    <div class="two-col">
+      <div>
+        <p class="lead">Today, Rubicon is the collaboration layer for twenty EMBA students working through real leadership problems together.</p>
+        <p style="margin-top:1.2rem;">Tomorrow, it's their professional network — a persistent collective intelligence that keeps learning long after graduation.</p>
+      </div>
+      <div>
+        <div class="card">
+          <h3 class="accent">For the cohort</h3>
+          <p>Twenty human perspectives, twenty agentic perspectives, one shared graph.</p>
+        </div>
+        <div class="card" style="margin-top:0.8rem;">
+          <h3 class="accent-2">For the alumni</h3>
+          <p>Your digital twin keeps collaborating — for as long as you want it to.</p>
+        </div>
+        <div class="card" style="margin-top:0.8rem;">
+          <h3>For the next cohort</h3>
+          <p>Every tool, workspace, and custom agent compounds for whoever comes next.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13. What's Next -->
+  <section class="slide">
+    <div class="eyebrow">Roadmap</div>
+    <h2>What's next.</h2>
+    <ul class="clean">
+      <li><span class="num">→</span><strong>Voice input and voice replies</strong> <span class="dim">— talk to your twin between classes.</span></li>
+      <li><span class="num">→</span><strong>Long-horizon memory</strong> <span class="dim">— after-action reviews feeding confidence calibration.</span></li>
+      <li><span class="num">→</span><strong>Calendar + email integration</strong> <span class="dim">— so agents understand where their humans actually are.</span></li>
+      <li><span class="num">→</span><strong>Cross-cohort federation</strong> <span class="dim">— invite alumni, board advisors, guest experts.</span></li>
+      <li><span class="num">→</span><strong>Custom anatomies</strong> <span class="dim">— teams define their own health models beyond the default ten systems.</span></li>
+    </ul>
+  </section>
+
+  <!-- 14. Closing -->
+  <section class="slide" style="text-align:left;">
+    <div class="eyebrow">Rubicon</div>
+    <h1>Cross the river.</h1>
+    <p class="lead">Every member's perspective, persistent and collaborative. Twenty people thinking like forty. Built for Cohort 84 — designed to outlast the program.</p>
+    <div style="margin-top:2.4rem; display:flex; gap:0.6rem; flex-wrap: wrap;">
+      <span class="tag">rubicon.app</span>
+      <span class="tag purple">Hans Prahl</span>
+      <span class="tag green">Live in production</span>
+    </div>
+    <div class="footer">
+      <span class="logo">Rubicon</span>
+      <span>Use <span class="kbd">←</span> <span class="kbd">→</span> to navigate</span>
+    </div>
+  </section>
+
+</div>
+
+<div class="nav">
+  <button id="prev" aria-label="Previous slide">&larr;</button>
+  <button id="next" aria-label="Next slide">&rarr;</button>
+</div>
+
+<script>
+  (function () {
+    var slides = document.querySelectorAll('.slide');
+    var total = slides.length;
+    var idx = 0;
+
+    function hashIndex() {
+      var m = window.location.hash.match(/^#(\d+)$/);
+      if (!m) return 0;
+      var n = parseInt(m[1], 10) - 1;
+      if (isNaN(n) || n < 0) return 0;
+      if (n >= total) return total - 1;
+      return n;
+    }
+
+    function render() {
+      slides.forEach(function (s, i) {
+        s.classList.toggle('active', i === idx);
+      });
+      document.getElementById('progressBar').style.width =
+        ((idx + 1) / total * 100) + '%';
+      if (('#' + (idx + 1)) !== window.location.hash) {
+        history.replaceState(null, '', '#' + (idx + 1));
+      }
+    }
+
+    function go(delta) {
+      idx = Math.max(0, Math.min(total - 1, idx + delta));
+      render();
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { go(1); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { go(-1); e.preventDefault(); }
+      else if (e.key === 'Home') { idx = 0; render(); }
+      else if (e.key === 'End') { idx = total - 1; render(); }
+    });
+
+    document.getElementById('next').addEventListener('click', function () { go(1); });
+    document.getElementById('prev').addEventListener('click', function () { go(-1); });
+
+    window.addEventListener('hashchange', function () {
+      idx = hashIndex();
+      render();
+    });
+
+    idx = hashIndex();
+    render();
+  })();
+</script>
+
+</body>
+</html>
